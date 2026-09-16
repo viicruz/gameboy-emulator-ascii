@@ -1,13 +1,13 @@
 {
   "name": "gameboy-emulator-ascii",
-  "module": "index.ts",
+  "module": "./src/index.ts",
   "type": "module",
   "private": true,
   "devDependencies": {
     "@types/bun": "latest"
   },
   "scripts": {
-    "start": "bun run index.ts"
+    "start": "bun run ./src/index.ts"
   },
   "peerDependencies": {
     "typescript": "^7"
