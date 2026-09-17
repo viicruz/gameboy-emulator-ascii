@@ -1,8 +1,27 @@
+//* Libraries imports
+import { spawn } from "node:child_process";
 import { Emulator, Button, renderFramebuffer } from "gboy-ts";
 
 const rom = new Uint8Array(await Bun.file("roms/tetris.gb").arrayBuffer());
 
 const emulator = new Emulator(rom);
+emulator.setAudioOutputEnabled(true);
+
+const sampleRate = emulator.getAudioSampleRate(); // 48000
+
+const aplay = spawn(
+  "aplay",
+  ["-t", "raw", "-f", "S16_LE", "-c", "2", "-r", String(sampleRate), "-"],
+  { stdio: ["pipe", "inherit", "inherit"] },
+);
+
+aplay.on("error", (err) => {
+  console.error("failed to start aplay:", err);
+});
+
+if (!aplay.stdin) {
+  throw new Error("aplay stdin is not available");
+}
 
 const width = 100;
 
@@ -39,6 +58,18 @@ function applyHeldButtons(emulator: Emulator, now: number) {
   }
 }
 
+function writeAudio() {
+  const samples = emulator.consumeAudioSamples();
+  if (samples.length === 0 || !aplay.stdin) return;
+
+  const pcm = Buffer.allocUnsafe(samples.length * 2);
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]!));
+    pcm.writeInt16LE((s * 32767) | 0, i * 2);
+  }
+  aplay.stdin.write(pcm);
+}
+
 process.stdin.setRawMode(true);
 process.stdin.resume();
 process.stdin.on("data", (chunk: Buffer) => {
@@ -71,8 +102,11 @@ while (true) {
   //t0 is the start time of the frame
   const t0 = Bun.nanoseconds();
   applyHeldButtons(emulator, Date.now());
-  //run the frame
+  // two GB frames per visual frame so audio stays near 60 Hz
+  emulator.runFrame();
+  writeAudio();
   const framebuffer = emulator.runFrame();
+  writeAudio();
   //render the frame and define the width, and type of rendering
   const frame = renderFramebuffer(framebuffer, "half-blocks", width);
 
@@ -89,6 +123,8 @@ while (true) {
 }
 
 function cleanup() {
+  aplay.stdin?.end();
+  aplay.kill();
   process.stdin.setRawMode(false);
   process.stdout.write("\x1b[?25h\x1b[?1049l\x1b[?7h");
 }
