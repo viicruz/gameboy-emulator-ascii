@@ -1,9 +1,12 @@
 //* Libraries imports
 import { spawn } from "node:child_process";
-import { Emulator, renderFramebuffer } from "gboy-ts";
+import { Emulator } from "gboy-ts";
 
 //* Input imports
 import { JoypadInput } from "./input.ts";
+
+//* Render imports
+import { parseRenderArgs, renderFrame, type RenderArgs } from "./render.ts";
 
 const rom = new Uint8Array(await Bun.file("roms/pokemon-yellow.gbc").arrayBuffer());
 
@@ -26,7 +29,15 @@ if (!aplay.stdin) {
   throw new Error("aplay stdin is not available");
 }
 
-const width = 100;
+let renderArgs: RenderArgs;
+try {
+  renderArgs = parseRenderArgs(process.argv.slice(2));
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+}
+
+const { format, width } = renderArgs;
 
 const FRAME_NS = 1_000_000_000 / 59.7;
 
@@ -83,7 +94,7 @@ while (true) {
   joypad.apply(emulator, Date.now());
   const framebuffer = emulator.runFrame();
   writeAudio();
-  const frame = renderFramebuffer(framebuffer, "ansi-half", width);
+  const frame = renderFrame(framebuffer, format, width);
 
   process.stdout.write("\x1b[H" + frame);
 
