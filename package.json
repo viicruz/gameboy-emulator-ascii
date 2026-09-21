@@ -14,5 +14,8 @@
   },
   "dependencies": {
     "gboy-ts": "github:viicruz/gboy.ts"
-  }
+  },
+  "trustedDependencies": [
+    "gboy-ts"
+  ]
 }
