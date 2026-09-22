@@ -8,10 +8,17 @@ import { JoypadInput } from "./input.ts";
 //* Render imports
 import { parseRenderArgs, renderFrame, type RenderArgs } from "./render.ts";
 
-const rom = new Uint8Array(await Bun.file("roms/pokemon-yellow.gbc").arrayBuffer());
+//* Save imports
+import { openBatterySave } from "./battery-save.ts";
+
+const ROM_PATH = "roms/pokemon-yellow.gbc";
+
+const rom = new Uint8Array(await Bun.file(ROM_PATH).arrayBuffer());
 
 const emulator = new Emulator(rom);
 emulator.setAudioOutputEnabled(true);
+
+const batterySave = await openBatterySave(rom, ROM_PATH, emulator);
 
 const sampleRate = emulator.getAudioSampleRate(); // 48000
 
@@ -42,10 +49,10 @@ const { format, width } = renderArgs;
 const FRAME_NS = 1_000_000_000 / 59.7;
 
 let cleaned = false;
+let stopping = false;
 
 const joypad = new JoypadInput(() => {
-  cleanup();
-  process.exit(0);
+  void shutdown();
 });
 
 function cleanup() {
@@ -58,6 +65,20 @@ function cleanup() {
   aplay.kill();
   process.stdin.setRawMode(false);
   process.stdout.write("\x1b[?25h\x1b[?1049l\x1b[?7h");
+}
+
+async function shutdown(): Promise<void> {
+  if (stopping) {
+    return;
+  }
+  stopping = true;
+  try {
+    await batterySave?.flush();
+  } catch (error) {
+    console.error("failed to flush battery save:", error);
+  }
+  cleanup();
+  process.exit(0);
 }
 
 function writeAudio() {
@@ -83,20 +104,23 @@ process.stdout.write(
 
 process.on("exit", cleanup);
 process.on("SIGINT", () => {
-  cleanup();
-  process.exit(0);
+  void shutdown();
 });
 
 await joypad.start();
 
-while (true) {
+while (!stopping) {
   const t0 = Bun.nanoseconds();
   joypad.apply(emulator, Date.now());
+  if (stopping) {
+    break;
+  }
   const framebuffer = emulator.runFrame();
   writeAudio();
   const frame = renderFrame(framebuffer, format, width);
 
   process.stdout.write("\x1b[H" + frame);
+  await batterySave?.tick();
 
   const elapsed = Bun.nanoseconds() - t0;
   const sleepTime = Math.max(0, (FRAME_NS - elapsed) / 1e6);

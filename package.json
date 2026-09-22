@@ -13,6 +13,9 @@
     "typescript": "^7"
   },
   "dependencies": {
-    "gboy-ts": "^1.0.0"
-  }
+    "gboy-ts": "github:viicruz/gboy.ts"
+  },
+  "trustedDependencies": [
+    "gboy-ts"
+  ]
 }
