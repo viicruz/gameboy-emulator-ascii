@@ -1,0 +1,13 @@
+diff --git a/src/apu.ts b/src/apu.ts
+index d0a9f11f823b304a2075a85575016e778c27f872..bb37a7d139fab8a06f17c5752e1ba4b500da83bc 100644
+--- a/src/apu.ts
++++ b/src/apu.ts
+@@ -26,7 +26,7 @@ const NR52 = 0xff26;
+ const WAVE_RAM_START = 0xff30;
+ const WAVE_RAM_END = 0xff3f;
+ 
+-const FRAME_SEQUENCER_PERIOD_T_CYCLES = 512;
++const FRAME_SEQUENCER_PERIOD_T_CYCLES = 8192;
+ const CPU_CLOCK_HZ = 4194304;
+ const DEFAULT_MAX_BUFFERED_FRAMES = 48000 * 4;
+ 
