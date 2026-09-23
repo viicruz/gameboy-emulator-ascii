@@ -139,6 +139,16 @@ describe("parseRenderArgs", () => {
   it("throws when the format is not supported", () => {
     expect(() => parseRenderArgs(["--format", "quads"])).toThrow("Invalid --format: quads.");
   });
+
+  it("uses a custom default format unless the format flag overrides it", () => {
+    const defaults = { format: "green" as const, width: 80 };
+
+    expect(parseRenderArgs([], defaults)).toEqual({ format: "green", width: 80 });
+    expect(parseRenderArgs(["--format", "ascii"], defaults)).toEqual({
+      format: "ascii",
+      width: 80,
+    });
+  });
 });
 
 describe("renderFrame", () => {
