@@ -56,9 +56,12 @@ function readFlagValue(
   return { value: next, nextIndex: index + 1 };
 }
 
-export function parseRenderArgs(argv: string[]): RenderArgs {
-  let format = DEFAULT_RENDER_ARGS.format;
-  let width = DEFAULT_RENDER_ARGS.width;
+export function parseRenderArgs(
+  argv: string[],
+  defaults: RenderArgs = DEFAULT_RENDER_ARGS,
+): RenderArgs {
+  let format = defaults.format;
+  let width = defaults.width;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
