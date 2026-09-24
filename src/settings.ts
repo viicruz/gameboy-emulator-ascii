@@ -2,6 +2,9 @@
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
+//* Controls imports
+import { cloneControls, DEFAULT_CONTROLS, parseControls, type Controls } from "./controls.ts";
+
 //* Render imports
 import {
   GBOY_RENDER_FORMATS,
@@ -13,23 +16,22 @@ const SETTINGS_PATH = "saves/settings.json";
 
 const DEFAULT_SETTINGS: Settings = {
   format: "braille",
+  controls: DEFAULT_CONTROLS,
 };
 
 export type Settings = {
   format: AppRenderFormat;
+  controls: Controls;
 };
 
 export function parseSettings(raw: unknown): Settings {
   if (typeof raw !== "object" || raw === null) {
-    return { format: DEFAULT_SETTINGS.format };
+    return { format: DEFAULT_SETTINGS.format, controls: cloneControls(DEFAULT_CONTROLS) };
   }
 
-  const format = (raw as { format?: unknown }).format;
-  if (!isAppRenderFormat(format)) {
-    return { format: DEFAULT_SETTINGS.format };
-  }
-
-  return { format };
+  const record = raw as { format?: unknown; controls?: unknown };
+  const format = isAppRenderFormat(record.format) ? record.format : DEFAULT_SETTINGS.format;
+  return { format, controls: parseControls(record.controls) };
 }
 
 export async function readSettings(filePath = SETTINGS_PATH): Promise<Settings> {
