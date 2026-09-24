@@ -1,6 +1,18 @@
 //* Libraries imports
 import { readdir } from "node:fs/promises";
 
+//* Controls imports
+import {
+  assignBinding,
+  cloneControls,
+  DEFAULT_CONTROLS,
+  formatBindings,
+  GAME_BUTTONS,
+  type Controls,
+  type GameButton,
+  type KeyBinding,
+} from "./controls.ts";
+
 //* Render imports
 import {
   GBOY_RENDER_FORMATS,
@@ -13,26 +25,62 @@ const ESCAPE_TIMEOUT_MS = 25;
 
 const MENU_RENDER_FORMATS = [...GBOY_RENDER_FORMATS, ...LOCAL_RENDER_FORMATS] as const;
 
-const HOME_ROWS = ["render", "rom"] as const;
+const HOME_ROWS = ["render", "controls", "rom"] as const;
+
+const BUTTON_LABEL: Record<GameButton, string> = {
+  a: "A",
+  b: "B",
+  select: "SELECT",
+  start: "START",
+  up: "UP",
+  down: "DOWN",
+  left: "LEFT",
+  right: "RIGHT",
+};
+
+const ARROW_FROM_FINAL: Record<string, KeyBinding> = {
+  A: { kind: "arrow", direction: "up" },
+  B: { kind: "arrow", direction: "down" },
+  C: { kind: "arrow", direction: "right" },
+  D: { kind: "arrow", direction: "left" },
+};
 
 export type MenuAction = "up" | "down" | "confirm" | "back";
 
-export type MenuKey = MenuAction | "quit";
+export type MenuBindingKey = { type: "binding"; binding: KeyBinding } | { type: "reserved" };
+
+export type MenuKey = MenuAction | "quit" | MenuBindingKey;
+
+type MenuMode = "navigate" | "capture";
 
 export type MenuState =
-  | { screen: "home"; cursor: number; format: AppRenderFormat }
-  | { screen: "render"; cursor: number; format: AppRenderFormat }
-  | { screen: "rom"; cursor: number; format: AppRenderFormat; roms: string[] };
+  | { screen: "home"; cursor: number; format: AppRenderFormat; controls: Controls }
+  | { screen: "render"; cursor: number; format: AppRenderFormat; controls: Controls }
+  | { screen: "rom"; cursor: number; format: AppRenderFormat; controls: Controls; roms: string[] }
+  | { screen: "controls"; cursor: number; format: AppRenderFormat; controls: Controls }
+  | {
+      screen: "capture";
+      cursor: number;
+      format: AppRenderFormat;
+      controls: Controls;
+      button: GameButton;
+      notice?: string;
+    };
 
 export type MenuStep =
   | { type: "continue"; state: MenuState }
   | { type: "quit" }
-  | { type: "start"; format: AppRenderFormat; romPath: string };
+  | { type: "start"; format: AppRenderFormat; controls: Controls; romPath: string };
 
-export type MenuResult = { type: "quit" } | { type: "start"; format: AppRenderFormat; romPath: string };
+export type MenuResult =
+  | { type: "quit" }
+  | { type: "start"; format: AppRenderFormat; controls: Controls; romPath: string };
 
-export function createHomeState(format: AppRenderFormat): MenuState {
-  return { screen: "home", cursor: 0, format };
+export function createHomeState(
+  format: AppRenderFormat,
+  controls: Controls = DEFAULT_CONTROLS,
+): MenuState {
+  return { screen: "home", cursor: 0, format, controls };
 }
 
 export function listRomFiles(names: readonly string[]): string[] {
@@ -43,49 +91,26 @@ export function listRomFiles(names: readonly string[]): string[] {
 
 export function reduceMenu(
   state: MenuState,
-  action: MenuAction,
+  action: MenuAction | MenuBindingKey,
   romFiles: readonly string[] = [],
 ): MenuStep {
+  if (typeof action !== "string") {
+    return reduceCapture(state, action);
+  }
+
   if (action === "up" || action === "down") {
+    if (state.screen === "capture") {
+      return { type: "continue", state };
+    }
     return { type: "continue", state: moveCursor(state, action === "up" ? -1 : 1) };
   }
 
   if (action === "back") {
-    if (state.screen === "home") {
-      return { type: "quit" };
-    }
-    return {
-      type: "continue",
-      state: {
-        screen: "home",
-        cursor: state.screen === "rom" ? 1 : 0,
-        format: state.format,
-      },
-    };
+    return backFrom(state);
   }
 
   if (state.screen === "home") {
-    if (state.cursor === 0) {
-      const cursor = MENU_RENDER_FORMATS.indexOf(state.format);
-      return {
-        type: "continue",
-        state: {
-          screen: "render",
-          cursor: cursor === -1 ? 0 : cursor,
-          format: state.format,
-        },
-      };
-    }
-
-    return {
-      type: "continue",
-      state: {
-        screen: "rom",
-        cursor: 0,
-        format: state.format,
-        roms: listRomFiles(romFiles),
-      },
-    };
+    return openHomeRow(state, romFiles);
   }
 
   if (state.screen === "render") {
@@ -95,8 +120,16 @@ export function reduceMenu(
     }
     return {
       type: "continue",
-      state: { screen: "home", cursor: 0, format },
+      state: { screen: "home", cursor: 0, format, controls: state.controls },
     };
+  }
+
+  if (state.screen === "controls") {
+    return confirmControls(state);
+  }
+
+  if (state.screen === "capture") {
+    return { type: "continue", state };
   }
 
   const name = state.roms[state.cursor];
@@ -104,16 +137,45 @@ export function reduceMenu(
     return { type: "continue", state };
   }
 
-  return { type: "start", format: state.format, romPath: `${ROMS_DIRECTORY}/${name}` };
+  return {
+    type: "start",
+    format: state.format,
+    controls: state.controls,
+    romPath: `${ROMS_DIRECTORY}/${name}`,
+  };
 }
 
 export function renderMenu(state: MenuState): string {
   if (state.screen === "home") {
     return [
       row(state.cursor === 0, `RENDER  ${state.format}`),
-      row(state.cursor === 1, "ROM"),
+      row(state.cursor === 1, "CONTROLS"),
+      row(state.cursor === 2, "ROM"),
       "",
       "enter  open    esc  quit",
+    ].join("\n");
+  }
+
+  if (state.screen === "controls") {
+    return [
+      "CONTROLS",
+      "",
+      ...GAME_BUTTONS.map((button, index) =>
+        row(index === state.cursor, `${BUTTON_LABEL[button]}  ${formatBindings(state.controls[button])}`),
+      ),
+      row(state.cursor === GAME_BUTTONS.length, "RESET"),
+      "",
+      "enter  rebind   esc  back",
+    ].join("\n");
+  }
+
+  if (state.screen === "capture") {
+    return [
+      `REBIND ${BUTTON_LABEL[state.button]}`,
+      "",
+      state.notice ?? "press a key",
+      "",
+      "esc  cancel",
     ].join("\n");
   }
 
@@ -169,11 +231,16 @@ export async function readRomDirectory(directory = ROMS_DIRECTORY): Promise<stri
 
 export class MenuKeyParser {
   private buffer = "";
+  private mode: MenuMode = "navigate";
   private escapeTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly onDelayed: (keys: MenuKey[]) => void;
 
   constructor(onDelayed: (keys: MenuKey[]) => void = () => {}) {
     this.onDelayed = onDelayed;
+  }
+
+  setMode(mode: MenuMode): void {
+    this.mode = mode;
   }
 
   feed(chunk: string): MenuKey[] {
@@ -203,15 +270,12 @@ export class MenuKeyParser {
       const head = this.buffer[0]!;
       if (head !== "\x1b") {
         this.buffer = this.buffer.slice(1);
-        if (head === "\r") {
-          keys.push("confirm");
-          if (this.buffer[0] === "\n") {
-            this.buffer = this.buffer.slice(1);
-          }
-        } else if (head === "\n") {
-          keys.push("confirm");
-        } else if (head === "\x03") {
-          keys.push("quit");
+        const key = this.plainKey(head);
+        if (key !== null) {
+          keys.push(key);
+        }
+        if ((head === "\r" || head === "\n") && this.buffer[0] === "\n" && head === "\r") {
+          this.buffer = this.buffer.slice(1);
         }
         continue;
       }
@@ -234,7 +298,10 @@ export class MenuKeyParser {
 
       const finalByte = this.buffer[2]!;
       this.buffer = this.buffer.slice(3);
-      if (finalByte === "A") {
+      const arrow = ARROW_FROM_FINAL[finalByte];
+      if (this.mode === "capture" && arrow !== undefined) {
+        keys.push({ type: "binding", binding: arrow });
+      } else if (finalByte === "A") {
         keys.push("up");
       } else if (finalByte === "B") {
         keys.push("down");
@@ -242,6 +309,19 @@ export class MenuKeyParser {
     }
 
     return keys;
+  }
+
+  private plainKey(head: string): MenuKey | null {
+    if (head === "\x03") {
+      return "quit";
+    }
+    if (this.mode === "capture") {
+      return capturePlainKey(head);
+    }
+    if (head === "\r" || head === "\n") {
+      return "confirm";
+    }
+    return null;
   }
 
   private armEscapeTimer(): void {
@@ -268,8 +348,11 @@ export class MenuKeyParser {
   }
 }
 
-export async function runMenu(initialFormat: AppRenderFormat): Promise<MenuResult> {
-  let state = createHomeState(initialFormat);
+export async function runMenu(
+  initialFormat: AppRenderFormat,
+  initialControls: Controls = DEFAULT_CONTROLS,
+): Promise<MenuResult> {
+  let state = createHomeState(initialFormat, initialControls);
   let settled = false;
   let pumping = false;
   const queue: MenuKey[] = [];
@@ -307,7 +390,7 @@ export async function runMenu(initialFormat: AppRenderFormat): Promise<MenuResul
         }
 
         const romFiles =
-          key === "confirm" && state.screen === "home" && state.cursor === 1
+          key === "confirm" && state.screen === "home" && state.cursor === 2
             ? await readRomDirectory()
             : undefined;
         if (settled) {
@@ -321,6 +404,7 @@ export async function runMenu(initialFormat: AppRenderFormat): Promise<MenuResul
         }
 
         state = step.state;
+        parser.setMode(state.screen === "capture" ? "capture" : "navigate");
         draw();
       }
 
@@ -361,7 +445,146 @@ function cursorLength(state: MenuState): number {
   if (state.screen === "render") {
     return MENU_RENDER_FORMATS.length;
   }
+  if (state.screen === "controls") {
+    return GAME_BUTTONS.length + 1;
+  }
+  if (state.screen === "capture") {
+    return 1;
+  }
   return state.roms.length;
+}
+
+function backFrom(state: MenuState): MenuStep {
+  if (state.screen === "home") {
+    return { type: "quit" };
+  }
+  if (state.screen === "capture") {
+    return {
+      type: "continue",
+      state: {
+        screen: "controls",
+        cursor: state.cursor,
+        format: state.format,
+        controls: state.controls,
+      },
+    };
+  }
+
+  const cursor = state.screen === "rom" ? 2 : state.screen === "controls" ? 1 : 0;
+  return {
+    type: "continue",
+    state: {
+      screen: "home",
+      cursor,
+      format: state.format,
+      controls: state.controls,
+    },
+  };
+}
+
+function openHomeRow(state: MenuState & { screen: "home" }, romFiles: readonly string[]): MenuStep {
+  if (state.cursor === 0) {
+    const cursor = MENU_RENDER_FORMATS.indexOf(state.format);
+    return {
+      type: "continue",
+      state: {
+        screen: "render",
+        cursor: cursor === -1 ? 0 : cursor,
+        format: state.format,
+        controls: state.controls,
+      },
+    };
+  }
+
+  if (state.cursor === 1) {
+    return {
+      type: "continue",
+      state: {
+        screen: "controls",
+        cursor: 0,
+        format: state.format,
+        controls: state.controls,
+      },
+    };
+  }
+
+  return {
+    type: "continue",
+    state: {
+      screen: "rom",
+      cursor: 0,
+      format: state.format,
+      controls: state.controls,
+      roms: listRomFiles(romFiles),
+    },
+  };
+}
+
+function confirmControls(state: MenuState & { screen: "controls" }): MenuStep {
+  if (state.cursor === GAME_BUTTONS.length) {
+    return {
+      type: "continue",
+      state: { ...state, controls: cloneControls(DEFAULT_CONTROLS) },
+    };
+  }
+
+  const button = GAME_BUTTONS[state.cursor];
+  if (button === undefined) {
+    return { type: "continue", state };
+  }
+
+  return {
+    type: "continue",
+    state: {
+      screen: "capture",
+      cursor: state.cursor,
+      format: state.format,
+      controls: state.controls,
+      button,
+    },
+  };
+}
+
+function reduceCapture(state: MenuState, action: MenuBindingKey): MenuStep {
+  if (state.screen !== "capture") {
+    return { type: "continue", state };
+  }
+  if (action.type === "reserved") {
+    return { type: "continue", state: { ...state, notice: "q is reserved" } };
+  }
+
+  return {
+    type: "continue",
+    state: {
+      screen: "controls",
+      cursor: state.cursor,
+      format: state.format,
+      controls: assignBinding(state.controls, state.button, action.binding),
+    },
+  };
+}
+
+function capturePlainKey(head: string): MenuKey | null {
+  if (head === "q" || head === "Q") {
+    return { type: "reserved" };
+  }
+  if (head === "\r" || head === "\n") {
+    return { type: "binding", binding: { kind: "named", name: "enter" } };
+  }
+  if (head === " ") {
+    return { type: "binding", binding: { kind: "named", name: "space" } };
+  }
+
+  const code = head.codePointAt(0) ?? 0;
+  if (code < 32 || code === 127) {
+    return null;
+  }
+
+  const value = head.toLowerCase();
+  if ([...value].length !== 1) {
+    return null;
+  }
+  return { type: "binding", binding: { kind: "char", value } };
 }
 
 function wrapCursor(cursor: number, delta: number, length: number): number {
