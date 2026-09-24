@@ -31,6 +31,7 @@ const settings = await readSettings();
 
 let format: AppRenderFormat;
 let width: number;
+let controls = settings.controls;
 let requestedRomPath: string | undefined;
 
 try {
@@ -107,12 +108,13 @@ let romPath: string;
 
 if (requestedRomPath === undefined) {
   beginTerminalSession();
-  const menuResult = await runMenu(format);
+  const menuResult = await runMenu(format, controls);
   if (menuResult.type === "quit") {
     cleanup();
     process.exit(0);
   }
   format = menuResult.format;
+  controls = menuResult.controls;
   romPath = menuResult.romPath;
 } else {
   romPath = requestedRomPath;
@@ -120,7 +122,7 @@ if (requestedRomPath === undefined) {
 }
 
 try {
-  await writeSettings({ format });
+  await writeSettings({ format, controls });
 } catch (error) {
   console.error("failed to write settings:", error);
 }
@@ -184,7 +186,7 @@ const rightChannel = createHighPassChannel();
 
 joypad = new JoypadInput(() => {
   void shutdown();
-});
+}, controls);
 
 function createHighPassChannel(): HighPassChannel {
   return { previousInput: 0, previousOutput: 0 };
