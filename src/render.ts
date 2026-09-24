@@ -90,6 +90,22 @@ export function parseRenderArgs(
   return { format, width };
 }
 
+export function centerFrame(
+  frame: string,
+  frameCols: number,
+  termCols: number,
+  termRows: number,
+): string {
+  const lines = frame.split("\n");
+  const left = Math.max(0, Math.floor((termCols - frameCols) / 2));
+  const top = Math.max(0, Math.floor((termRows - lines.length) / 2));
+  const pad = " ".repeat(left);
+  const topPad = "\x1b[K\n".repeat(top);
+  const body = lines.map((line) => `${pad}${line}\x1b[K`).join("\n");
+
+  return `${topPad}${body}\x1b[J`;
+}
+
 export function renderFrame(
   fb: Uint8Array,
   format: AppRenderFormat,
