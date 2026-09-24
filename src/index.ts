@@ -1,5 +1,6 @@
 //* Libraries imports
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import type { Writable } from "node:stream";
 import { Emulator } from "gboy-ts";
 
 //* Audio imports
@@ -8,31 +9,137 @@ import { writeWithBackpressure } from "./audio-writer.ts";
 //* Input imports
 import { JoypadInput } from "./input.ts";
 
+//* Menu imports
+import { parseRomArg, runMenu } from "./menu.ts";
+
 //* Render imports
-import { parseRenderArgs, renderFrame, type RenderArgs } from "./render.ts";
+import { parseRenderArgs, renderFrame, type AppRenderFormat } from "./render.ts";
 
 //* Save imports
-import { openBatterySave } from "./battery-save.ts";
+import { openBatterySave, type BatterySave } from "./battery-save.ts";
+
+//* Settings imports
+import { readSettings, writeSettings } from "./settings.ts";
 
 //* Timing imports
 import { FramePacer, GB_FRAME_NS } from "./frame-pacer.ts";
 
-const ROM_PATH = "roms/pokemon-yellow.gbc";
 const HIGHPASS_CUTOFF_HZ = 20;
 
-const rom = new Uint8Array(await Bun.file(ROM_PATH).arrayBuffer());
+const argv = process.argv.slice(2);
+const settings = await readSettings();
+
+let format: AppRenderFormat;
+let width: number;
+let controls = settings.controls;
+let requestedRomPath: string | undefined;
+
+try {
+  const renderArgs = parseRenderArgs(argv, { format: settings.format, width: 80 });
+  format = renderArgs.format;
+  width = renderArgs.width;
+  requestedRomPath = parseRomArg(argv);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+}
+
+let cleaned = false;
+let stopping = false;
+let lastRenderNs = 0;
+let audioEnabled = true;
+let joypad: JoypadInput | undefined;
+let player: ChildProcess | undefined;
+let audioSink: Writable | undefined;
+let batterySave: BatterySave | null | undefined;
+let playerClosed = Promise.resolve();
+
+type HighPassChannel = {
+  previousInput: number;
+  previousOutput: number;
+};
+
+function beginTerminalSession(): void {
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdout.write(
+    "\x1b[?1049h" + // alternate screen
+      "\x1b[?25l" + // hide cursor
+      "\x1b[?7l", // disable wrap
+  );
+}
+
+function restoreTerminal(): void {
+  process.stdin.setRawMode(false);
+  process.stdout.write("\x1b[?25h\x1b[?1049l\x1b[?7h");
+}
+
+function cleanup(): void {
+  if (cleaned) {
+    return;
+  }
+  cleaned = true;
+  joypad?.stop();
+  audioSink?.end();
+  player?.kill();
+  restoreTerminal();
+}
+
+async function shutdown(): Promise<void> {
+  if (stopping) {
+    return;
+  }
+  stopping = true;
+  try {
+    await batterySave?.flush();
+  } catch (error) {
+    console.error("failed to flush battery save:", error);
+  }
+  cleanup();
+  process.exit(0);
+}
+
+process.on("exit", cleanup);
+process.on("SIGINT", () => {
+  void shutdown();
+});
+
+let romPath: string;
+
+if (requestedRomPath === undefined) {
+  beginTerminalSession();
+  const menuResult = await runMenu(format, controls);
+  if (menuResult.type === "quit") {
+    cleanup();
+    process.exit(0);
+  }
+  format = menuResult.format;
+  controls = menuResult.controls;
+  romPath = menuResult.romPath;
+} else {
+  romPath = requestedRomPath;
+  beginTerminalSession();
+}
+
+try {
+  await writeSettings({ format, controls });
+} catch (error) {
+  console.error("failed to write settings:", error);
+}
+
+const rom = new Uint8Array(await Bun.file(romPath).arrayBuffer());
 
 const emulator = new Emulator(rom);
 emulator.setAudioOutputEnabled(true);
 
-const batterySave = await openBatterySave(rom, ROM_PATH, emulator);
+batterySave = await openBatterySave(rom, romPath, emulator);
 
 const sampleRate = emulator.getAudioSampleRate(); // 48000
 const highPassDt = 1 / sampleRate;
 const highPassRc = 1 / (2 * Math.PI * HIGHPASS_CUTOFF_HZ);
 const highPassAlpha = highPassRc / (highPassRc + highPassDt);
 
-const player = spawn(
+const playerProcess = spawn(
   "pw-cat",
   [
     "--playback",
@@ -52,55 +159,34 @@ const player = spawn(
   ],
   { stdio: ["pipe", "ignore", "pipe"] },
 );
+player = playerProcess;
 
-let audioEnabled = true;
-
-const playerClosed = new Promise<void>((resolve) => {
-  player.once("exit", () => {
+playerClosed = new Promise<void>((resolve) => {
+  playerProcess.once("exit", () => {
     audioEnabled = false;
     resolve();
   });
 });
 
-player.on("error", (err) => {
+playerProcess.on("error", (err) => {
   audioEnabled = false;
   console.error("failed to start pw-cat:", err);
 });
 
-if (!player.stdin) {
+if (!playerProcess.stdin) {
   throw new Error("pw-cat stdin is not available");
 }
 
-player.stderr?.resume();
-
-const audioSink = player.stdin;
-
-let renderArgs: RenderArgs;
-try {
-  renderArgs = parseRenderArgs(process.argv.slice(2));
-} catch (error) {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-}
-
-const { format, width } = renderArgs;
-
-let cleaned = false;
-let stopping = false;
-let lastRenderNs = 0;
+playerProcess.stderr?.resume();
+audioSink = playerProcess.stdin;
 
 const framePacer = new FramePacer();
 const leftChannel = createHighPassChannel();
 const rightChannel = createHighPassChannel();
 
-const joypad = new JoypadInput(() => {
+joypad = new JoypadInput(() => {
   void shutdown();
-});
-
-type HighPassChannel = {
-  previousInput: number;
-  previousOutput: number;
-};
+}, controls);
 
 function createHighPassChannel(): HighPassChannel {
   return { previousInput: 0, previousOutput: 0 };
@@ -118,35 +204,9 @@ function quantizeSample(sample: number): number {
   return (clamped * 32767) | 0;
 }
 
-function cleanup() {
-  if (cleaned) {
-    return;
-  }
-  cleaned = true;
-  joypad.stop();
-  audioSink.end();
-  player.kill();
-  process.stdin.setRawMode(false);
-  process.stdout.write("\x1b[?25h\x1b[?1049l\x1b[?7h");
-}
-
-async function shutdown(): Promise<void> {
-  if (stopping) {
-    return;
-  }
-  stopping = true;
-  try {
-    await batterySave?.flush();
-  } catch (error) {
-    console.error("failed to flush battery save:", error);
-  }
-  cleanup();
-  process.exit(0);
-}
-
 async function writeAudio(): Promise<void> {
   const samples = emulator.consumeAudioSamples();
-  if (!audioEnabled || samples.length === 0) {
+  if (!audioEnabled || samples.length === 0 || audioSink === undefined) {
     return;
   }
 
@@ -165,20 +225,6 @@ async function writeAudio(): Promise<void> {
     console.error("audio playback stopped:", error);
   }
 }
-
-process.stdin.setRawMode(true);
-process.stdin.resume();
-
-process.stdout.write(
-  "\x1b[?1049h" + // alternate screen
-  "\x1b[?25l" + // hide cursor
-  "\x1b[?7l", // disable wrap
-);
-
-process.on("exit", cleanup);
-process.on("SIGINT", () => {
-  void shutdown();
-});
 
 await joypad.start();
 

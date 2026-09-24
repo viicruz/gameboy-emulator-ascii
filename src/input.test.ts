@@ -2,6 +2,9 @@
 import { describe, expect, it } from "bun:test";
 import { Button } from "gboy-ts";
 
+//* Controls imports
+import { assignBinding, DEFAULT_CONTROLS } from "./controls.ts";
+
 //* Input imports
 import { InputParser } from "./input.ts";
 
@@ -100,6 +103,19 @@ describe("InputParser", () => {
       expect(parser.feed("3u")).toEqual([
         { kind: "key", button: Button.A, type: "release" },
       ]);
+    });
+
+    it("maps a custom letter in both legacy and kitty forms", () => {
+      const parser = new InputParser(assignBinding(DEFAULT_CONTROLS, "up", { kind: "char", value: "w" }));
+
+      expect(parser.feed("w")).toEqual([{ kind: "key", button: Button.Up, type: "press" }]);
+      expect(parser.feed("\x1b[119;1u")).toEqual([{ kind: "key", button: Button.Up, type: "press" }]);
+    });
+
+    it("stops treating the up arrow as Up after that button is rebound", () => {
+      const parser = new InputParser(assignBinding(DEFAULT_CONTROLS, "up", { kind: "char", value: "w" }));
+
+      expect(parser.feed("\x1b[A")).toEqual([]);
     });
 
     it("parses multiple events from a single chunk", () => {

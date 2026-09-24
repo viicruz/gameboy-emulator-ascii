@@ -1,6 +1,14 @@
 //* Libraries imports
 import { Button } from "gboy-ts";
 
+//* Controls imports
+import {
+  buildControlLookup,
+  DEFAULT_CONTROLS,
+  type Controls,
+  type GameButton,
+} from "./controls.ts";
+
 export type KeyEventType = "press" | "repeat" | "release";
 
 type ButtonTarget = {
@@ -41,42 +49,29 @@ const INITIAL_REPEAT_MS = 350;
 const REPEAT_HOLD_MS = 80;
 const MAX_CSI_LENGTH = 256;
 
-const CODEPOINT_TO_BUTTON: Record<number, Button> = {
-  122: Button.A,
-  90: Button.A,
-  97: Button.A,
-  65: Button.A,
-  120: Button.B,
-  88: Button.B,
-  115: Button.B,
-  83: Button.B,
-  32: Button.Select,
-  13: Button.Start,
-};
-
-const ARROW_FINAL_TO_BUTTON: Record<string, Button> = {
-  A: Button.Up,
-  B: Button.Down,
-  C: Button.Right,
-  D: Button.Left,
-};
-
-const LEGACY_KEY_TO_BUTTON: Record<string, Button> = {
-  z: Button.A,
-  Z: Button.A,
+const BUTTON_BY_NAME: Record<GameButton, Button> = {
   a: Button.A,
-  A: Button.A,
-  x: Button.B,
-  X: Button.B,
-  s: Button.B,
-  S: Button.B,
-  " ": Button.Select,
-  "\r": Button.Start,
-  "\n": Button.Start,
+  b: Button.B,
+  select: Button.Select,
+  start: Button.Start,
+  up: Button.Up,
+  down: Button.Down,
+  left: Button.Left,
+  right: Button.Right,
 };
 
 export class InputParser {
   private buffer = "";
+  private readonly codepointToButton: Map<number, Button>;
+  private readonly legacyToButton: Map<string, Button>;
+  private readonly arrowToButton: Map<string, Button>;
+
+  constructor(controls: Controls = DEFAULT_CONTROLS) {
+    const lookup = buildControlLookup(controls);
+    this.codepointToButton = toButtonMap(lookup.codepoint);
+    this.legacyToButton = toButtonMap(lookup.legacy);
+    this.arrowToButton = toButtonMap(lookup.arrow);
+  }
 
   feed(chunk: string): ParserEvent[] {
     this.buffer += chunk;
@@ -154,7 +149,7 @@ export class InputParser {
     }
 
     const final = this.buffer[start + 2] ?? "";
-    const button = ARROW_FINAL_TO_BUTTON[final];
+    const button = this.arrowToButton.get(final);
     if (button === undefined) {
       return { events: [], nextIndex: start + 3 };
     }
@@ -182,7 +177,7 @@ export class InputParser {
       return this.csiUEvent(params);
     }
 
-    const arrow = ARROW_FINAL_TO_BUTTON[final];
+    const arrow = this.arrowToButton.get(final);
     if (arrow !== undefined) {
       const fields = params.split(";");
       const type = eventTypeFromField(fields[1] ?? fields[0]);
@@ -209,7 +204,7 @@ export class InputParser {
       return { kind: "quit", type };
     }
 
-    const button = CODEPOINT_TO_BUTTON[keyCode];
+    const button = this.codepointToButton.get(keyCode);
     if (button === undefined) {
       return null;
     }
@@ -222,7 +217,7 @@ export class InputParser {
       return { kind: "quit", type: "press" };
     }
 
-    const button = LEGACY_KEY_TO_BUTTON[char];
+    const button = this.legacyToButton.get(char);
     if (button === undefined) {
       return null;
     }
@@ -255,12 +250,20 @@ function modifierFromField(field: string | undefined): number {
   return Number.isNaN(value) ? 1 : value;
 }
 
+function toButtonMap<Key>(source: Map<Key, GameButton>): Map<Key, Button> {
+  const buttons = new Map<Key, Button>();
+  for (const [key, name] of source) {
+    buttons.set(key, BUTTON_BY_NAME[name]);
+  }
+  return buttons;
+}
+
 function protocolSupported(flags: number): boolean {
   return (flags & REPORT_EVENTS) !== 0 && (flags & REPORT_ALL_KEYS) !== 0;
 }
 
 export class JoypadInput {
-  private readonly parser = new InputParser();
+  private readonly parser: InputParser;
   private readonly protocolHeld = new Set<Button>();
   private readonly legacyHeld = new Map<Button, LegacyHoldState>();
   private readonly onQuit: () => void;
@@ -272,8 +275,9 @@ export class JoypadInput {
   private handshakeTimer: ReturnType<typeof setTimeout> | undefined;
   usesProtocol = false;
 
-  constructor(onQuit: () => void) {
+  constructor(onQuit: () => void, controls: Controls = DEFAULT_CONTROLS) {
     this.onQuit = onQuit;
+    this.parser = new InputParser(controls);
   }
 
   async start(): Promise<void> {
