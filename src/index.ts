@@ -13,7 +13,13 @@ import { JoypadInput } from "./input.ts";
 import { parseRomArg, runMenu } from "./menu.ts";
 
 //* Render imports
-import { parseRenderArgs, renderFrame, type AppRenderFormat } from "./render.ts";
+import {
+  centerFrame,
+  LOCAL_RENDER_FORMATS,
+  parseRenderArgs,
+  renderFrame,
+  type AppRenderFormat,
+} from "./render.ts";
 
 //* Save imports
 import { openBatterySave, type BatterySave } from "./battery-save.ts";
@@ -242,7 +248,15 @@ while (!stopping) {
   if (!skipVisual) {
     const renderStartNs = Bun.nanoseconds();
     const frame = renderFrame(framebuffer, format, width);
-    process.stdout.write("\x1b[H" + frame);
+    const output = (LOCAL_RENDER_FORMATS as readonly string[]).includes(format)
+      ? centerFrame(
+          frame,
+          width,
+          process.stdout.columns ?? width,
+          process.stdout.rows ?? frame.split("\n").length,
+        )
+      : frame;
+    process.stdout.write("\x1b[H" + output);
     lastRenderNs = Bun.nanoseconds() - renderStartNs;
   }
 
