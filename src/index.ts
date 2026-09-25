@@ -4,13 +4,13 @@ import type { Writable } from "node:stream";
 import { Emulator } from "gboy-ts";
 
 //* Audio imports
-import { writeWithBackpressure } from "./audio-writer.ts";
+import { writeWithBackpressure } from "./audio/audio-writer.ts";
 
 //* Input imports
-import { JoypadInput } from "./input.ts";
+import { JoypadInput } from "./input/input.ts";
 
 //* Menu imports
-import { parseRomArg, runMenu } from "./menu.ts";
+import { parseRomArg, runMenu } from "./menu/menu.ts";
 
 //* Render imports
 import {
@@ -20,16 +20,16 @@ import {
   parseRenderArgs,
   renderFrame,
   type AppRenderFormat,
-} from "./render.ts";
+} from "./render/render.ts";
 
 //* Save imports
-import { openBatterySave, type BatterySave } from "./battery-save.ts";
+import { openBatterySave, type BatterySave } from "./save/battery-save.ts";
 
 //* Settings imports
-import { readSettings, writeSettings } from "./settings.ts";
+import { readSettings, writeSettings } from "./menu/settings.ts";
 
 //* Timing imports
-import { FramePacer, GB_FRAME_NS } from "./frame-pacer.ts";
+import { FramePacer, GB_FRAME_NS } from "./timing/frame-pacer.ts";
 
 const HIGHPASS_CUTOFF_HZ = 20;
 

@@ -3,14 +3,14 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 //* Controls imports
-import { cloneControls, DEFAULT_CONTROLS, parseControls, type Controls } from "./controls.ts";
+import { cloneControls, DEFAULT_CONTROLS, parseControls, type Controls } from "../input/controls.ts";
 
 //* Render imports
 import {
   GBOY_RENDER_FORMATS,
   LOCAL_RENDER_FORMATS,
   type AppRenderFormat,
-} from "./render.ts";
+} from "../render/render.ts";
 
 const SETTINGS_PATH = "saves/settings.json";
 

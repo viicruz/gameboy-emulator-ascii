@@ -9,7 +9,7 @@ import {
   DEFAULT_CONTROLS,
   formatBindings,
   parseControls,
-} from "./controls.ts";
+} from "../../src/input/controls.ts";
 
 describe("parseControls", () => {
   it("returns the default layout when the value is missing", () => {

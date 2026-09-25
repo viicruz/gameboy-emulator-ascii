@@ -2,8 +2,8 @@
 import { describe, expect, it } from "bun:test";
 
 //* Render imports
-import { centerFrame, fitBrailleColumns, parseRenderArgs, renderFrame } from "./render.ts";
-import { renderBraille } from "./render-braille.ts";
+import { centerFrame, fitBrailleColumns, parseRenderArgs, renderFrame } from "../../src/render/render.ts";
+import { renderBraille } from "../../src/render/render-braille.ts";
 
 const GB_WIDTH = 160;
 const GB_HEIGHT = 144;

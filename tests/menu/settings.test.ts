@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 //* Controls imports
-import { DEFAULT_CONTROLS } from "./controls.ts";
+import { DEFAULT_CONTROLS } from "../../src/input/controls.ts";
 
 //* Settings imports
-import { parseSettings, readSettings, writeSettings } from "./settings.ts";
+import { parseSettings, readSettings, writeSettings } from "../../src/menu/settings.ts";
 
 const tempDirs: string[] = [];
 

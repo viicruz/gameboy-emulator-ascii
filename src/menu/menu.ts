@@ -11,14 +11,14 @@ import {
   type Controls,
   type GameButton,
   type KeyBinding,
-} from "./controls.ts";
+} from "../input/controls.ts";
 
 //* Render imports
 import {
   GBOY_RENDER_FORMATS,
   LOCAL_RENDER_FORMATS,
   type AppRenderFormat,
-} from "./render.ts";
+} from "../render/render.ts";
 
 const ROMS_DIRECTORY = "roms";
 const ESCAPE_TIMEOUT_MS = 25;

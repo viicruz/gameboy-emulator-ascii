@@ -3,10 +3,10 @@ import { describe, expect, it } from "bun:test";
 import { Button } from "gboy-ts";
 
 //* Controls imports
-import { assignBinding, DEFAULT_CONTROLS } from "./controls.ts";
+import { assignBinding, DEFAULT_CONTROLS } from "../../src/input/controls.ts";
 
 //* Input imports
-import { InputParser } from "./input.ts";
+import { InputParser } from "../../src/input/input.ts";
 
 describe("InputParser", () => {
   describe("legacy keys", () => {

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 //* Save imports
-import { openBatterySave, type BatteryRam } from "./battery-save.ts";
+import { openBatterySave, type BatteryRam } from "../../src/save/battery-save.ts";
 
 const tempDirs: string[] = [];
 

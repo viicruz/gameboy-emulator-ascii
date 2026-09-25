@@ -2,7 +2,7 @@
 import { describe, expect, it } from "bun:test";
 
 //* Controls imports
-import { assignBinding, DEFAULT_CONTROLS } from "./controls.ts";
+import { assignBinding, DEFAULT_CONTROLS } from "../../src/input/controls.ts";
 
 //* Menu imports
 import {
@@ -13,7 +13,7 @@ import {
   reduceMenu,
   renderMenu,
   type MenuState,
-} from "./menu.ts";
+} from "../../src/menu/menu.ts";
 
 describe("reduceMenu", () => {
   describe("confirm", () => {
