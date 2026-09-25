@@ -73,7 +73,7 @@ describe("BatterySave", () => {
 
       const save = await openBatterySave(
         makeRom(0x00),
-        "roms/pokemon-yellow.gbc",
+        "roms/pokemon-yellow.gb",
         emulator,
         { savesDir },
       );
@@ -91,7 +91,7 @@ describe("BatterySave", () => {
 
       const save = await openBatterySave(
         makeRom(0x1b),
-        "roms/pokemon-yellow.gbc",
+        "roms/pokemon-yellow.gb",
         emulator,
         { savesDir },
       );
@@ -113,7 +113,7 @@ describe("BatterySave", () => {
       try {
         const save = await openBatterySave(
           makeRom(0x1b),
-          "roms/pokemon-yellow.gbc",
+          "roms/pokemon-yellow.gb",
           emulator,
           { savesDir },
         );
@@ -135,7 +135,7 @@ describe("BatterySave", () => {
       let now = 5_000;
       const save = await openBatterySave(
         makeRom(0x1b),
-        "roms/pokemon-yellow.gbc",
+        "roms/pokemon-yellow.gb",
         emulator,
         { savesDir, debounceMs: 1000, now: () => now },
       );
@@ -166,7 +166,7 @@ describe("BatterySave", () => {
       const emulator = new FakeEmulator(4);
       const save = await openBatterySave(
         makeRom(0x1b),
-        "roms/pokemon-yellow.gbc",
+        "roms/pokemon-yellow.gb",
         emulator,
         { savesDir },
       );

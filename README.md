@@ -25,7 +25,7 @@ bun install
 
 ## ROMs
 
-Put `.gb` and `.gbc` files in `roms/`. The menu only lists files in that folder. ROM files are gitignored; `roms/.gitkeep` stays in the repo.
+Put `.gb` files in `roms/`. The menu only lists files in that folder. ROM files are gitignored; `roms/.gitkeep` stays in the repo.
 
 ## Run
 
@@ -48,7 +48,7 @@ Optional flags:
 | --- | --- |
 | `--format` | Render format. Default is `braille`. |
 | `--width` | Frame width in columns. Also caps braille width. |
-| `--rom` | Path to a `.gb` or `.gbc` file. |
+| `--rom` | Path to a `.gb` file. |
 
 Formats: `braille`, `braille-green`.
 
