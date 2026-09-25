@@ -23,6 +23,7 @@ export type AppRenderFormat =
 export type RenderArgs = {
   format: AppRenderFormat;
   width: number;
+  maxWidth?: number;
 };
 
 const DEFAULT_RENDER_ARGS: RenderArgs = {
@@ -62,6 +63,7 @@ export function parseRenderArgs(
 ): RenderArgs {
   let format = defaults.format;
   let width = defaults.width;
+  let maxWidth = defaults.maxWidth;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -83,11 +85,47 @@ export function parseRenderArgs(
         throw new Error(`Invalid --width: ${value}.`);
       }
       width = parsed;
+      maxWidth = parsed;
       i = nextIndex;
     }
   }
 
-  return { format, width };
+  return maxWidth === undefined ? { format, width } : { format, width, maxWidth };
+}
+
+function brailleRows(cols: number): number {
+  return Math.max(1, Math.round((cols * 9) / 20));
+}
+
+export function fitBrailleColumns(
+  termCols: number,
+  termRows: number,
+  maxCols?: number,
+): number {
+  const widthLimit = maxCols === undefined ? termCols : Math.min(termCols, maxCols);
+  let cols = Math.max(1, Math.min(widthLimit, Math.floor((termRows * 20) / 9)));
+
+  while (cols > 1 && brailleRows(cols) > termRows) {
+    cols -= 1;
+  }
+
+  return cols;
+}
+
+export function centerFrame(
+  frame: string,
+  frameCols: number,
+  termCols: number,
+  termRows: number,
+): string {
+  const lines = frame.split("\n");
+  const left = Math.max(0, Math.floor((termCols - frameCols) / 2));
+  const top = Math.max(0, Math.floor((termRows - lines.length) / 2));
+  const pad = " ".repeat(left);
+  const topPad = "\x1b[K\n".repeat(top);
+  const body = lines.map((line) => `${pad}${line}\x1b[K`).join("\n");
+
+  return `${topPad}${body}\x1b[J`;
 }
 
 export function renderFrame(

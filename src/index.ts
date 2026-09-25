@@ -13,7 +13,14 @@ import { JoypadInput } from "./input.ts";
 import { parseRomArg, runMenu } from "./menu.ts";
 
 //* Render imports
-import { parseRenderArgs, renderFrame, type AppRenderFormat } from "./render.ts";
+import {
+  centerFrame,
+  fitBrailleColumns,
+  LOCAL_RENDER_FORMATS,
+  parseRenderArgs,
+  renderFrame,
+  type AppRenderFormat,
+} from "./render.ts";
 
 //* Save imports
 import { openBatterySave, type BatterySave } from "./battery-save.ts";
@@ -31,6 +38,7 @@ const settings = await readSettings();
 
 let format: AppRenderFormat;
 let width: number;
+let maxWidth: number | undefined;
 let controls = settings.controls;
 let requestedRomPath: string | undefined;
 
@@ -38,6 +46,7 @@ try {
   const renderArgs = parseRenderArgs(argv, { format: settings.format, width: 80 });
   format = renderArgs.format;
   width = renderArgs.width;
+  maxWidth = renderArgs.maxWidth;
   requestedRomPath = parseRomArg(argv);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
@@ -241,8 +250,18 @@ while (!stopping) {
   const skipVisual = spentNs + lastRenderNs >= GB_FRAME_NS;
   if (!skipVisual) {
     const renderStartNs = Bun.nanoseconds();
-    const frame = renderFrame(framebuffer, format, width);
-    process.stdout.write("\x1b[H" + frame);
+    const isBraille = (LOCAL_RENDER_FORMATS as readonly string[]).includes(format);
+    const termCols = process.stdout.columns;
+    const termRows = process.stdout.rows;
+    const frameCols =
+      isBraille && termCols !== undefined && termRows !== undefined
+        ? fitBrailleColumns(termCols, termRows, maxWidth)
+        : width;
+    const frame = renderFrame(framebuffer, format, frameCols);
+    const output = isBraille
+      ? centerFrame(frame, frameCols, termCols ?? frameCols, termRows ?? frame.split("\n").length)
+      : frame;
+    process.stdout.write("\x1b[H" + output);
     lastRenderNs = Bun.nanoseconds() - renderStartNs;
   }
 

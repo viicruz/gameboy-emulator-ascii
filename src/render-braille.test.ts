@@ -2,7 +2,7 @@
 import { describe, expect, it } from "bun:test";
 
 //* Render imports
-import { parseRenderArgs, renderFrame } from "./render.ts";
+import { centerFrame, fitBrailleColumns, parseRenderArgs, renderFrame } from "./render.ts";
 import { renderBraille } from "./render-braille.ts";
 
 const GB_WIDTH = 160;
@@ -126,6 +126,7 @@ describe("parseRenderArgs", () => {
     expect(parseRenderArgs(["--format", "ansi-half", "--width", "100"])).toEqual({
       format: "ansi-half",
       width: 100,
+      maxWidth: 100,
     });
   });
 
@@ -133,6 +134,7 @@ describe("parseRenderArgs", () => {
     expect(parseRenderArgs(["--format=braille-green", "--width=40"])).toEqual({
       format: "braille-green",
       width: 40,
+      maxWidth: 40,
     });
   });
 
@@ -157,5 +159,63 @@ describe("renderFrame", () => {
 
     expect(frame.startsWith("\x1b[38;2;155;188;15m")).toBe(true);
     expect(visibleLines(frame)).toHaveLength(36);
+  });
+});
+
+describe("centerFrame", () => {
+  const frame = "AB\nCD";
+
+  it("pads each line so an 80-column frame sits in the middle of a wider terminal", () => {
+    const centered = centerFrame("AB", 80, 100, 1);
+    const line = centered.replace("\x1b[K", "").replace("\x1b[J", "");
+
+    expect(line.startsWith(" ".repeat(10))).toBe(true);
+    expect(line.trimStart()).toBe("AB");
+  });
+
+  it("inserts blank rows so the frame sits in the middle of a taller terminal", () => {
+    const centered = centerFrame(frame, 2, 2, 6);
+    const rows = centered.replace("\x1b[J", "").split("\n");
+
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toBe("\x1b[K");
+    expect(rows[1]).toBe("\x1b[K");
+    expect(rows[2]).toBe("AB\x1b[K");
+    expect(rows[3]).toBe("CD\x1b[K");
+  });
+
+  it("leaves the frame at the origin when the terminal is smaller than the frame", () => {
+    const centered = centerFrame(frame, 80, 40, 1);
+
+    expect(centered.startsWith("AB")).toBe(true);
+    expect(centered.includes("\n\x1b[K\n")).toBe(false);
+  });
+
+  it("clears the rest of each line and the area below the frame", () => {
+    const centered = centerFrame(frame, 2, 4, 4);
+
+    expect(centered).toBe("\x1b[K\n AB\x1b[K\n CD\x1b[K\x1b[J");
+  });
+});
+
+describe("fitBrailleColumns", () => {
+  it("fits a 5000 by 100 terminal into 222 columns", () => {
+    expect(fitBrailleColumns(5000, 100)).toBe(222);
+  });
+
+  it("stays at 50 columns when the terminal width is the limit", () => {
+    expect(fitBrailleColumns(50, 40)).toBe(50);
+  });
+
+  it("stays within the height of a 200 by 50 terminal", () => {
+    expect(fitBrailleColumns(200, 50)).toBe(111);
+  });
+
+  it("does not exceed a max column cap of 40", () => {
+    expect(fitBrailleColumns(5000, 100, 40)).toBe(40);
+  });
+
+  it("returns 1 column for a 1 by 1 terminal", () => {
+    expect(fitBrailleColumns(1, 1)).toBe(1);
   });
 });
