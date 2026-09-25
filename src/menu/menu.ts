@@ -11,19 +11,15 @@ import {
   type Controls,
   type GameButton,
   type KeyBinding,
-} from "./controls.ts";
+} from "../input/controls.ts";
 
 //* Render imports
-import {
-  GBOY_RENDER_FORMATS,
-  LOCAL_RENDER_FORMATS,
-  type AppRenderFormat,
-} from "./render.ts";
+import { LOCAL_RENDER_FORMATS, type AppRenderFormat } from "../render/render.ts";
 
 const ROMS_DIRECTORY = "roms";
 const ESCAPE_TIMEOUT_MS = 25;
 
-const MENU_RENDER_FORMATS = [...GBOY_RENDER_FORMATS, ...LOCAL_RENDER_FORMATS] as const;
+const MENU_RENDER_FORMATS = LOCAL_RENDER_FORMATS;
 
 const HOME_ROWS = ["render", "controls", "rom"] as const;
 
@@ -610,7 +606,7 @@ function isRomFileName(name: string): boolean {
     return false;
   }
   const lower = name.toLowerCase();
-  return lower.endsWith(".gb") || lower.endsWith(".gbc");
+  return lower.endsWith(".gb");
 }
 
 function readFlagValue(argv: string[], index: number, flag: string): string {

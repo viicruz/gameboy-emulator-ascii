@@ -2,7 +2,7 @@
 import { describe, expect, it } from "bun:test";
 
 //* Controls imports
-import { assignBinding, DEFAULT_CONTROLS } from "./controls.ts";
+import { assignBinding, DEFAULT_CONTROLS } from "../../src/input/controls.ts";
 
 //* Menu imports
 import {
@@ -13,7 +13,7 @@ import {
   reduceMenu,
   renderMenu,
   type MenuState,
-} from "./menu.ts";
+} from "../../src/menu/menu.ts";
 
 describe("reduceMenu", () => {
   describe("confirm", () => {
@@ -36,7 +36,7 @@ describe("reduceMenu", () => {
 
       expect(reduceMenu(state, "confirm")).toEqual({
         type: "continue",
-        state: { screen: "home", cursor: 0, format: "ansi", controls: DEFAULT_CONTROLS },
+        state: { screen: "home", cursor: 0, format: "braille", controls: DEFAULT_CONTROLS },
       });
     });
 
@@ -50,14 +50,14 @@ describe("reduceMenu", () => {
         throw new Error("expected the cursor to move to Rom");
       }
 
-      expect(reduceMenu(step.state, "confirm", ["b.gbc", "notes.txt", "a.gb"])).toEqual({
+      expect(reduceMenu(step.state, "confirm", ["b.gb", "notes.txt", "a.gb"])).toEqual({
         type: "continue",
         state: {
           screen: "rom",
           cursor: 0,
           format: "braille",
           controls: DEFAULT_CONTROLS,
-          roms: ["a.gb", "b.gbc"],
+          roms: ["a.gb", "b.gb"],
         },
       });
     });
@@ -66,16 +66,16 @@ describe("reduceMenu", () => {
       const state: MenuState = {
         screen: "rom",
         cursor: 1,
-        format: "green",
+        format: "braille-green",
         controls: DEFAULT_CONTROLS,
-        roms: ["alpha.gb", "beta.gbc"],
+        roms: ["alpha.gb", "beta.gb"],
       };
 
       expect(reduceMenu(state, "confirm")).toEqual({
         type: "start",
-        format: "green",
+        format: "braille-green",
         controls: DEFAULT_CONTROLS,
-        romPath: "roms/beta.gbc",
+        romPath: "roms/beta.gb",
       });
     });
 
@@ -111,14 +111,14 @@ describe("reduceMenu", () => {
       const state: MenuState = {
         screen: "rom",
         cursor: 0,
-        format: "blocks",
+        format: "braille-green",
         controls: DEFAULT_CONTROLS,
         roms: ["game.gb"],
       };
 
       expect(reduceMenu(state, "back")).toEqual({
         type: "continue",
-        state: { screen: "home", cursor: 2, format: "blocks", controls: DEFAULT_CONTROLS },
+        state: { screen: "home", cursor: 2, format: "braille-green", controls: DEFAULT_CONTROLS },
       });
     });
 
@@ -128,7 +128,7 @@ describe("reduceMenu", () => {
   });
 
   describe("cursor movement", () => {
-    const roms = ["a.gb", "b.gb", "c.gbc"];
+    const roms = ["a.gb", "b.gb", "c.gb"];
 
     it("wraps from the first row to the last row", () => {
       const state: MenuState = {
@@ -357,11 +357,10 @@ describe("controls screen", () => {
 });
 
 describe("listRomFiles", () => {
-  it("keeps gb and gbc names, drops other names, and sorts", () => {
+  it("keeps gb names, drops other names, and sorts", () => {
     expect(listRomFiles(["zeta.gbc", "notes.txt", "alpha.gb", "nested/skip.gb", "Demo.GB"])).toEqual([
       "alpha.gb",
       "Demo.GB",
-      "zeta.gbc",
     ]);
   });
 });
@@ -376,7 +375,7 @@ describe("parseRomArg", () => {
   });
 
   it("reads an inline rom path", () => {
-    expect(parseRomArg(["--rom=roms/game.gbc"])).toBe("roms/game.gbc");
+    expect(parseRomArg(["--rom=roms/game.gb"])).toBe("roms/game.gb");
   });
 
   it("throws when the rom flag has no value", () => {

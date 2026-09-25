@@ -4,32 +4,31 @@ import type { Writable } from "node:stream";
 import { Emulator } from "gboy-ts";
 
 //* Audio imports
-import { writeWithBackpressure } from "./audio-writer.ts";
+import { writeWithBackpressure } from "./audio/audio-writer.ts";
 
 //* Input imports
-import { JoypadInput } from "./input.ts";
+import { JoypadInput } from "./input/input.ts";
 
 //* Menu imports
-import { parseRomArg, runMenu } from "./menu.ts";
+import { parseRomArg, runMenu } from "./menu/menu.ts";
 
 //* Render imports
 import {
   centerFrame,
   fitBrailleColumns,
-  LOCAL_RENDER_FORMATS,
   parseRenderArgs,
   renderFrame,
   type AppRenderFormat,
-} from "./render.ts";
+} from "./render/render.ts";
 
 //* Save imports
-import { openBatterySave, type BatterySave } from "./battery-save.ts";
+import { openBatterySave, type BatterySave } from "./save/battery-save.ts";
 
 //* Settings imports
-import { readSettings, writeSettings } from "./settings.ts";
+import { readSettings, writeSettings } from "./menu/settings.ts";
 
 //* Timing imports
-import { FramePacer, GB_FRAME_NS } from "./frame-pacer.ts";
+import { FramePacer, GB_FRAME_NS } from "./timing/frame-pacer.ts";
 
 const HIGHPASS_CUTOFF_HZ = 20;
 
@@ -250,17 +249,19 @@ while (!stopping) {
   const skipVisual = spentNs + lastRenderNs >= GB_FRAME_NS;
   if (!skipVisual) {
     const renderStartNs = Bun.nanoseconds();
-    const isBraille = (LOCAL_RENDER_FORMATS as readonly string[]).includes(format);
     const termCols = process.stdout.columns;
     const termRows = process.stdout.rows;
     const frameCols =
-      isBraille && termCols !== undefined && termRows !== undefined
+      termCols !== undefined && termRows !== undefined
         ? fitBrailleColumns(termCols, termRows, maxWidth)
         : width;
     const frame = renderFrame(framebuffer, format, frameCols);
-    const output = isBraille
-      ? centerFrame(frame, frameCols, termCols ?? frameCols, termRows ?? frame.split("\n").length)
-      : frame;
+    const output = centerFrame(
+      frame,
+      frameCols,
+      termCols ?? frameCols,
+      termRows ?? frame.split("\n").length,
+    );
     process.stdout.write("\x1b[H" + output);
     lastRenderNs = Bun.nanoseconds() - renderStartNs;
   }

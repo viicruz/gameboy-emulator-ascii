@@ -2,7 +2,7 @@
 import { describe, expect, it } from "bun:test";
 
 //* Audio imports
-import { queuedBytesLimit, writeWithBackpressure, type AudioSink } from "./audio-writer.ts";
+import { queuedBytesLimit, writeWithBackpressure, type AudioSink } from "../../src/audio/audio-writer.ts";
 
 const SAMPLE_RATE = 48_000;
 

@@ -1,24 +1,9 @@
-//* Libraries imports
-import { renderFramebuffer, type RenderFormat } from "gboy-ts";
-
 //* Render imports
 import { renderBraille } from "./render-braille.ts";
 
-export const GBOY_RENDER_FORMATS = [
-  "ansi",
-  "ansi-half",
-  "green",
-  "green-half",
-  "ascii",
-  "blocks",
-  "half-blocks",
-] as const satisfies readonly RenderFormat[];
-
 export const LOCAL_RENDER_FORMATS = ["braille", "braille-green"] as const;
 
-export type AppRenderFormat =
-  | (typeof GBOY_RENDER_FORMATS)[number]
-  | (typeof LOCAL_RENDER_FORMATS)[number];
+export type AppRenderFormat = (typeof LOCAL_RENDER_FORMATS)[number];
 
 export type RenderArgs = {
   format: AppRenderFormat;
@@ -32,10 +17,7 @@ const DEFAULT_RENDER_ARGS: RenderArgs = {
 };
 
 function isAppRenderFormat(value: string): value is AppRenderFormat {
-  return (
-    (GBOY_RENDER_FORMATS as readonly string[]).includes(value) ||
-    (LOCAL_RENDER_FORMATS as readonly string[]).includes(value)
-  );
+  return (LOCAL_RENDER_FORMATS as readonly string[]).includes(value);
 }
 
 function readFlagValue(
@@ -138,7 +120,5 @@ export function renderFrame(
       return renderBraille(fb, { width, palette: "ansi" });
     case "braille-green":
       return renderBraille(fb, { width, palette: "green" });
-    default:
-      return renderFramebuffer(fb, format, width);
   }
 }

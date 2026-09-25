@@ -2,7 +2,7 @@
 import { describe, expect, it } from "bun:test";
 
 //* Timing imports
-import { FramePacer, GB_FRAME_NS } from "./frame-pacer.ts";
+import { FramePacer, GB_FRAME_NS } from "../../src/timing/frame-pacer.ts";
 
 function createClock() {
   let nowNs = 0;
