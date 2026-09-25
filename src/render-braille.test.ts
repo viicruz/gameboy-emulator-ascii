@@ -2,7 +2,7 @@
 import { describe, expect, it } from "bun:test";
 
 //* Render imports
-import { centerFrame, parseRenderArgs, renderFrame } from "./render.ts";
+import { centerFrame, fitBrailleColumns, parseRenderArgs, renderFrame } from "./render.ts";
 import { renderBraille } from "./render-braille.ts";
 
 const GB_WIDTH = 160;
@@ -126,6 +126,7 @@ describe("parseRenderArgs", () => {
     expect(parseRenderArgs(["--format", "ansi-half", "--width", "100"])).toEqual({
       format: "ansi-half",
       width: 100,
+      maxWidth: 100,
     });
   });
 
@@ -133,6 +134,7 @@ describe("parseRenderArgs", () => {
     expect(parseRenderArgs(["--format=braille-green", "--width=40"])).toEqual({
       format: "braille-green",
       width: 40,
+      maxWidth: 40,
     });
   });
 
@@ -193,5 +195,27 @@ describe("centerFrame", () => {
     const centered = centerFrame(frame, 2, 4, 4);
 
     expect(centered).toBe("\x1b[K\n AB\x1b[K\n CD\x1b[K\x1b[J");
+  });
+});
+
+describe("fitBrailleColumns", () => {
+  it("fits a 5000 by 100 terminal into 222 columns", () => {
+    expect(fitBrailleColumns(5000, 100)).toBe(222);
+  });
+
+  it("stays at 50 columns when the terminal width is the limit", () => {
+    expect(fitBrailleColumns(50, 40)).toBe(50);
+  });
+
+  it("stays within the height of a 200 by 50 terminal", () => {
+    expect(fitBrailleColumns(200, 50)).toBe(111);
+  });
+
+  it("does not exceed a max column cap of 40", () => {
+    expect(fitBrailleColumns(5000, 100, 40)).toBe(40);
+  });
+
+  it("returns 1 column for a 1 by 1 terminal", () => {
+    expect(fitBrailleColumns(1, 1)).toBe(1);
   });
 });
