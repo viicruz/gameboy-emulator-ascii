@@ -6,11 +6,7 @@ import { dirname } from "node:path";
 import { cloneControls, DEFAULT_CONTROLS, parseControls, type Controls } from "../input/controls.ts";
 
 //* Render imports
-import {
-  GBOY_RENDER_FORMATS,
-  LOCAL_RENDER_FORMATS,
-  type AppRenderFormat,
-} from "../render/render.ts";
+import { LOCAL_RENDER_FORMATS, type AppRenderFormat } from "../render/render.ts";
 
 const SETTINGS_PATH = "saves/settings.json";
 
@@ -59,9 +55,5 @@ export async function writeSettings(settings: Settings, filePath = SETTINGS_PATH
 }
 
 function isAppRenderFormat(value: unknown): value is AppRenderFormat {
-  return (
-    typeof value === "string" &&
-    ((GBOY_RENDER_FORMATS as readonly string[]).includes(value) ||
-      (LOCAL_RENDER_FORMATS as readonly string[]).includes(value))
-  );
+  return typeof value === "string" && (LOCAL_RENDER_FORMATS as readonly string[]).includes(value);
 }

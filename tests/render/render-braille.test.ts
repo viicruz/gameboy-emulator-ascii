@@ -123,8 +123,8 @@ describe("parseRenderArgs", () => {
   });
 
   it("reads space-separated format and width flags", () => {
-    expect(parseRenderArgs(["--format", "ansi-half", "--width", "100"])).toEqual({
-      format: "ansi-half",
+    expect(parseRenderArgs(["--format", "braille", "--width", "100"])).toEqual({
+      format: "braille",
       width: 100,
       maxWidth: 100,
     });
@@ -140,14 +140,16 @@ describe("parseRenderArgs", () => {
 
   it("throws when the format is not supported", () => {
     expect(() => parseRenderArgs(["--format", "quads"])).toThrow("Invalid --format: quads.");
+    expect(() => parseRenderArgs(["--format", "ansi-half"])).toThrow("Invalid --format: ansi-half.");
+    expect(() => parseRenderArgs(["--format", "ascii"])).toThrow("Invalid --format: ascii.");
   });
 
   it("uses a custom default format unless the format flag overrides it", () => {
-    const defaults = { format: "green" as const, width: 80 };
+    const defaults = { format: "braille-green" as const, width: 80 };
 
-    expect(parseRenderArgs([], defaults)).toEqual({ format: "green", width: 80 });
-    expect(parseRenderArgs(["--format", "ascii"], defaults)).toEqual({
-      format: "ascii",
+    expect(parseRenderArgs([], defaults)).toEqual({ format: "braille-green", width: 80 });
+    expect(parseRenderArgs(["--format", "braille"], defaults)).toEqual({
+      format: "braille",
       width: 80,
     });
   });

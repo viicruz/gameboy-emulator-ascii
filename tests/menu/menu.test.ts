@@ -36,7 +36,7 @@ describe("reduceMenu", () => {
 
       expect(reduceMenu(state, "confirm")).toEqual({
         type: "continue",
-        state: { screen: "home", cursor: 0, format: "ansi", controls: DEFAULT_CONTROLS },
+        state: { screen: "home", cursor: 0, format: "braille", controls: DEFAULT_CONTROLS },
       });
     });
 
@@ -66,14 +66,14 @@ describe("reduceMenu", () => {
       const state: MenuState = {
         screen: "rom",
         cursor: 1,
-        format: "green",
+        format: "braille-green",
         controls: DEFAULT_CONTROLS,
         roms: ["alpha.gb", "beta.gbc"],
       };
 
       expect(reduceMenu(state, "confirm")).toEqual({
         type: "start",
-        format: "green",
+        format: "braille-green",
         controls: DEFAULT_CONTROLS,
         romPath: "roms/beta.gbc",
       });
@@ -111,14 +111,14 @@ describe("reduceMenu", () => {
       const state: MenuState = {
         screen: "rom",
         cursor: 0,
-        format: "blocks",
+        format: "braille-green",
         controls: DEFAULT_CONTROLS,
         roms: ["game.gb"],
       };
 
       expect(reduceMenu(state, "back")).toEqual({
         type: "continue",
-        state: { screen: "home", cursor: 2, format: "blocks", controls: DEFAULT_CONTROLS },
+        state: { screen: "home", cursor: 2, format: "braille-green", controls: DEFAULT_CONTROLS },
       });
     });
 

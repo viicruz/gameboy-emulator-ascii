@@ -16,7 +16,6 @@ import { parseRomArg, runMenu } from "./menu/menu.ts";
 import {
   centerFrame,
   fitBrailleColumns,
-  LOCAL_RENDER_FORMATS,
   parseRenderArgs,
   renderFrame,
   type AppRenderFormat,
@@ -250,17 +249,19 @@ while (!stopping) {
   const skipVisual = spentNs + lastRenderNs >= GB_FRAME_NS;
   if (!skipVisual) {
     const renderStartNs = Bun.nanoseconds();
-    const isBraille = (LOCAL_RENDER_FORMATS as readonly string[]).includes(format);
     const termCols = process.stdout.columns;
     const termRows = process.stdout.rows;
     const frameCols =
-      isBraille && termCols !== undefined && termRows !== undefined
+      termCols !== undefined && termRows !== undefined
         ? fitBrailleColumns(termCols, termRows, maxWidth)
         : width;
     const frame = renderFrame(framebuffer, format, frameCols);
-    const output = isBraille
-      ? centerFrame(frame, frameCols, termCols ?? frameCols, termRows ?? frame.split("\n").length)
-      : frame;
+    const output = centerFrame(
+      frame,
+      frameCols,
+      termCols ?? frameCols,
+      termRows ?? frame.split("\n").length,
+    );
     process.stdout.write("\x1b[H" + output);
     lastRenderNs = Bun.nanoseconds() - renderStartNs;
   }

@@ -24,8 +24,8 @@ async function makeTempDir(): Promise<string> {
 
 describe("parseSettings", () => {
   it("keeps a known format", () => {
-    expect(parseSettings({ format: "blocks" })).toEqual({
-      format: "blocks",
+    expect(parseSettings({ format: "braille-green" })).toEqual({
+      format: "braille-green",
       controls: DEFAULT_CONTROLS,
     });
   });
@@ -47,6 +47,14 @@ describe("parseSettings", () => {
 
   it("falls back to braille when the format name is unknown", () => {
     expect(parseSettings({ format: "quads" })).toEqual({
+      format: "braille",
+      controls: DEFAULT_CONTROLS,
+    });
+    expect(parseSettings({ format: "blocks" })).toEqual({
+      format: "braille",
+      controls: DEFAULT_CONTROLS,
+    });
+    expect(parseSettings({ format: "ansi-half" })).toEqual({
       format: "braille",
       controls: DEFAULT_CONTROLS,
     });
@@ -82,14 +90,14 @@ describe("writeSettings", () => {
 
     await writeSettings(
       {
-        format: "ansi-half",
+        format: "braille-green",
         controls: { ...DEFAULT_CONTROLS, a: [{ kind: "char", value: "w" }] },
       },
       filePath,
     );
 
     expect(await readSettings(filePath)).toEqual({
-      format: "ansi-half",
+      format: "braille-green",
       controls: { ...DEFAULT_CONTROLS, a: [{ kind: "char", value: "w" }] },
     });
   });
