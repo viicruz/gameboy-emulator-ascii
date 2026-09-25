@@ -1,6 +1,14 @@
-# gameboy-emulator-ascii
+# gameboy-emulator-braille
 
-Terminal Game Boy emulator. Video is drawn as braille; audio plays through PipeWire. The emulator core is [`gboy-ts`](https://github.com/viicruz/gboy.ts).
+Terminal Game Boy emulator. Video is drawn as braille; audio plays through PipeWire.
+
+## Emulator core
+
+The core is [`gboy-ts`](https://github.com/viicruz/gboy.ts), a fork of [gboy.ts](https://github.com/MaxLeiter/gboy.ts). Upstream targets the browser and serverless environments, where progress is a full savestate (`serialize` / `deserialize`): a snapshot of the running machine. It does not write cartridge battery RAM to disk.
+
+The fork adds `getRam`, `setRam`, and `setOnRamWrite` so a long-running process can persist that RAM. This app turns those calls into `saves/<rom-name>.sav`.
+
+Upstream steps the APU frame sequencer every 512 T-cycles, so length, envelope, and sweep run sixteen times too fast. The fork sets that period to 8192 T-cycles. This install pins an earlier fork commit and applies the same change from `patches/`.
 
 ## Requirements
 
@@ -71,7 +79,9 @@ In the menu, arrow keys move the cursor, Enter confirms, and Esc goes back or qu
 
 ## Saves
 
-Cartridges with battery-backed RAM write to `saves/<rom-name>.sav`.
+Cartridges whose type byte at `0x0147` includes a battery write to `saves/<rom-name>.sav`. Other cartridges do not create a file. On startup the save is loaded when its size matches cartridge RAM.
+
+A RAM write waits 1 second, then the file is replaced atomically: write `*.sav.tmp`, then rename it over the save. Quitting flushes a pending write. Render format and key bindings stay in `saves/settings.json`, separate from cartridge RAM.
 
 ## Tests
 
