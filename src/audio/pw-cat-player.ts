@@ -1,12 +1,16 @@
 //* Libraries imports
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 
 //* Audio imports
 import type { AudioSink } from "./audio-writer.ts";
 import type { AudioPlayer } from "./audio-player.ts";
 
-export function pwCatArgs(sampleRate: number): string[] {
-  return [
+export function pwCatSupportsRaw(help: string): boolean {
+  return help.includes("--raw");
+}
+
+export function pwCatArgs(sampleRate: number, raw: boolean): string[] {
+  const args = [
     "--playback",
     "--rate",
     String(sampleRate),
@@ -20,12 +24,53 @@ export function pwCatArgs(sampleRate: number): string[] {
     "20ms",
     "--media-role",
     "Game",
-    "-",
   ];
+
+  if (raw) {
+    args.push("--raw");
+  }
+
+  args.push("-");
+  return args;
+}
+
+let rawSupported: boolean | undefined;
+
+function readPwCatHelp(): string {
+  try {
+    return execFileSync("pw-cat", ["--help"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    return `${readExecOutput(error, "stdout")}${readExecOutput(error, "stderr")}`;
+  }
+}
+
+function readExecOutput(error: unknown, field: "stdout" | "stderr"): string {
+  if (typeof error !== "object" || error === null || !(field in error)) {
+    return "";
+  }
+
+  const value = (error as { stdout?: unknown; stderr?: unknown })[field];
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value instanceof Uint8Array) {
+    return new TextDecoder().decode(value);
+  }
+  return "";
+}
+
+function cachedPwCatSupportsRaw(): boolean {
+  if (rawSupported === undefined) {
+    rawSupported = pwCatSupportsRaw(readPwCatHelp());
+  }
+  return rawSupported;
 }
 
 export function openPwCatPlayer(sampleRate: number): AudioPlayer {
-  const playerProcess = spawn("pw-cat", pwCatArgs(sampleRate), {
+  const playerProcess = spawn("pw-cat", pwCatArgs(sampleRate, cachedPwCatSupportsRaw()), {
     stdio: ["pipe", "ignore", "pipe"],
   });
 
