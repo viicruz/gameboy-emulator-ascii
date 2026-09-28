@@ -12,8 +12,8 @@
   "peerDependencies": {
     "typescript": "^7"
   },
-  "dependencies": {
-    "gboy-ts": "github:viicruz/gboy.ts"
+ "dependencies": {
+    "gboy-ts": "github:viicruz/gboy.ts#85cea5e"
   },
   "trustedDependencies": [
     "gboy-ts"
