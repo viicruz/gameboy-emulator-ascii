@@ -12,13 +12,10 @@
   "peerDependencies": {
     "typescript": "^7"
   },
-  "dependencies": {
-    "gboy-ts": "github:viicruz/gboy.ts"
+ "dependencies": {
+    "gboy-ts": "github:viicruz/gboy.ts#85cea5e"
   },
   "trustedDependencies": [
     "gboy-ts"
-  ],
-  "patchedDependencies": {
-    "gboy-ts@github:viicruz/gboy.ts#c977122": "patches/gboy-ts@github%3Aviicruz%2Fgboy.ts#c977122.patch"
-  }
+  ]
 }
