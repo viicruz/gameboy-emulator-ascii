@@ -1,6 +1,6 @@
 # gameboy-emulator-braille
 
-Terminal Game Boy emulator. Video is drawn as braille; audio plays through PipeWire.
+Terminal Game Boy emulator. Video is drawn as braille; audio plays through the system mixer.
 
 ## Emulator core
 
@@ -13,9 +13,10 @@ Upstream steps the APU frame sequencer every 512 T-cycles, so length, envelope, 
 ## Requirements
 
 - [Bun](https://bun.com)
-- `pw-cat` from PipeWire, for sound
+- Linux: `pw-cat` from PipeWire, for sound
+- Windows: sound plays through `waveOut`. No extra program is required.
 
-If `pw-cat` is missing, playback stops and the emulator keeps running.
+If the audio device cannot be opened, playback stops and the emulator keeps running.
 
 ## Install
 
