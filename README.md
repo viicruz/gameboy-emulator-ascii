@@ -26,7 +26,9 @@ bun install
 
 ## ROMs
 
-Put `.gb` files in `roms/`. The menu only lists files in that folder. ROM files are gitignored; `roms/.gitkeep` stays in the repo.
+Put `.gb` and `.gbc` files in `roms/`. The menu lists both. ROM files are gitignored; `roms/.gitkeep` stays in the repo.
+
+This emulator targets the original Game Boy. Some Game Boy Color games also run on that hardware and work here. Games that require Game Boy Color hardware may fail to start or run incorrectly.
 
 ## Run
 
@@ -49,7 +51,7 @@ Optional flags:
 | --- | --- |
 | `--format` | Render format. Default is `braille`. |
 | `--width` | Frame width in columns. Also caps braille width. |
-| `--rom` | Path to a `.gb` file. |
+| `--rom` | Path to a `.gb` or `.gbc` file. |
 
 Formats: `braille`, `braille-green`.
 
