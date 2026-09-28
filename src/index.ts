@@ -1,6 +1,9 @@
 //* Libraries imports
 import { Emulator } from "gboy-ts";
 
+//* Package imports
+import { version } from "../package.json" with { type: "json" };
+
 //* Audio imports
 import { openAudioPlayer, type AudioPlayer } from "./audio/audio-player.ts";
 import { writeWithBackpressure, type AudioSink } from "./audio/audio-writer.ts";
@@ -32,6 +35,12 @@ import { FramePacer, GB_FRAME_NS } from "./timing/frame-pacer.ts";
 const HIGHPASS_CUTOFF_HZ = 20;
 
 const argv = process.argv.slice(2);
+
+if (argv.includes("--version")) {
+  console.log(version);
+  process.exit(0);
+}
+
 const settings = await readSettings();
 
 let format: AppRenderFormat;

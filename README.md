@@ -1,4 +1,4 @@
-# gameboy-emulator-braille
+# gameboy-emulator-terminal
 
 Terminal Game Boy emulator. Video is drawn as braille; audio plays through the system mixer.
 
@@ -12,13 +12,48 @@ Upstream steps the APU frame sequencer every 512 T-cycles, so length, envelope, 
 
 ## Requirements
 
-- [Bun](https://bun.com)
+The installed command does not need Bun.
+
 - Linux: `pw-cat` from PipeWire, for sound
 - Windows: sound plays through `waveOut`. No extra program is required.
+
+Running from source also needs [Bun](https://bun.com).
 
 If the audio device cannot be opened, playback stops and the emulator keeps running.
 
 ## Install
+
+### Linux
+
+```bash
+curl -fsSL https://github.com/viicruz/gameboy-emulator-terminal/releases/latest/download/install.sh | bash
+```
+
+Installs the binary to `~/.local/bin/gbt`.
+
+To install a specific version:
+
+```bash
+curl -fsSL https://github.com/viicruz/gameboy-emulator-terminal/releases/download/vX.Y.Z/install.sh | GBT_VERSION=X.Y.Z bash
+```
+
+### Windows (x64)
+
+```powershell
+irm https://github.com/viicruz/gameboy-emulator-terminal/releases/latest/download/install.ps1 | iex
+```
+
+Installs the binary to `%LOCALAPPDATA%\gbt\bin\gbt.exe` and adds that directory to the user `PATH`.
+
+To install a specific version:
+
+```powershell
+$env:GBT_VERSION='X.Y.Z'; irm https://github.com/viicruz/gameboy-emulator-terminal/releases/download/vX.Y.Z/install.ps1 | iex
+```
+
+The installer does not ship ROMs. `--rom`, the `roms/` directory, and `saves/` stay relative to the directory where you run `gbt`.
+
+### From source
 
 ```bash
 bun install
@@ -35,10 +70,23 @@ This emulator targets the original Game Boy. Some Game Boy Color games also run 
 Open the menu (render format, controls, and ROM):
 
 ```bash
+gbt
+```
+
+From source:
+
+```bash
 bun start
 ```
 
 Skip the menu and load a ROM directly:
+
+```bash
+gbt --rom roms/game.gb
+gbt --rom=roms/game.gb
+```
+
+From source, pass flags after `--`:
 
 ```bash
 bun start -- --rom roms/game.gb
@@ -52,8 +100,15 @@ Optional flags:
 | `--format` | Render format. Default is `braille`. |
 | `--width` | Frame width in columns. Also caps braille width. |
 | `--rom` | Path to a `.gb` or `.gbc` file. |
+| `--version` | Print the installed version and exit. |
 
 Formats: `braille`, `braille-green`.
+
+```bash
+gbt --rom roms/game.gb --format braille-green --width 80
+```
+
+From source:
 
 ```bash
 bun start -- --rom roms/game.gb --format braille-green --width 80

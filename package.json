@@ -1,5 +1,6 @@
 {
-  "name": "gameboy-emulator-ascii",
+  "name": "gameboy-emulator-terminal",
+  "version": "0.0.0",
   "module": "./src/index.ts",
   "type": "module",
   "private": true,
@@ -7,12 +8,14 @@
     "@types/bun": "latest"
   },
   "scripts": {
-    "start": "bun run ./src/index.ts"
+    "start": "bun run ./src/index.ts",
+    "build": "bun build ./src/index.ts --compile --outfile dist/gbt",
+    "build:all": "bun build ./src/index.ts --compile --target=bun-linux-x64 --outfile dist/gbt-linux-x64 && bun build ./src/index.ts --compile --target=bun-linux-arm64 --outfile dist/gbt-linux-arm64 && bun build ./src/index.ts --compile --target=bun-windows-x64 --outfile dist/gbt-windows-x64.exe"
   },
   "peerDependencies": {
     "typescript": "^7"
   },
- "dependencies": {
+  "dependencies": {
     "gboy-ts": "github:viicruz/gboy.ts#85cea5e"
   },
   "trustedDependencies": [
