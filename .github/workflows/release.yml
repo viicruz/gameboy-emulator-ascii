@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver version without v prefix (e.g. 0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure main branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Release workflow can only run from the main branch (got ${{ github.ref }})."
+          exit 1
+
+      - name: Validate version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          VERSION="${INPUT_VERSION#v}"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid semver version: ${INPUT_VERSION}"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "tag=v${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Bump version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          bun -e "
+            const pkg = await Bun.file('package.json').json();
+            pkg.version = process.env.VERSION;
+            await Bun.write('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+      - name: Build standalone binaries
+        run: bun run build:all
+
+      - name: Prepare release assets
+        run: |
+          cp dist/gbt-linux-x64 gbt-linux-x64
+          cp dist/gbt-linux-arm64 gbt-linux-arm64
+          cp dist/gbt-windows-x64.exe gbt-windows-x64.exe
+          chmod +x gbt-linux-x64 gbt-linux-arm64
+          cp scripts/install.sh install.sh
+          cp scripts/install.ps1 install.ps1
+          chmod +x install.sh
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit, tag and push
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git add package.json
+          git commit -m "chore: release ${TAG}"
+          git tag "${TAG}"
+          git push origin HEAD:main
+          git push origin "${TAG}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create "${TAG}" \
+            gbt-linux-x64 \
+            gbt-linux-arm64 \
+            gbt-windows-x64.exe \
+            install.sh \
+            install.ps1 \
+            --title "${TAG}" \
+            --notes "$(cat <<EOF
+          ## Install
+
+          ### Linux
+
+          \`\`\`bash
+          curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/install.sh | bash
+          \`\`\`
+
+          Installs the binary to \`~/.local/bin/gbt\`.
+
+          To install a specific version:
+
+          \`\`\`bash
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/${TAG}/install.sh | GBT_VERSION=${VERSION} bash
+          \`\`\`
+
+          ### Windows (x64)
+
+          \`\`\`powershell
+          irm https://github.com/${{ github.repository }}/releases/latest/download/install.ps1 | iex
+          \`\`\`
+
+          Installs the binary to \`%LOCALAPPDATA%\\gbt\\bin\\gbt.exe\`.
+
+          To install a specific version:
+
+          \`\`\`powershell
+          \$env:GBT_VERSION='${VERSION}'; irm https://github.com/${{ github.repository }}/releases/download/${TAG}/install.ps1 | iex
+          \`\`\`
+          EOF
+          )"
