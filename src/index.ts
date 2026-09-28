@@ -1,10 +1,9 @@
 //* Libraries imports
-import { spawn, type ChildProcess } from "node:child_process";
-import type { Writable } from "node:stream";
 import { Emulator } from "gboy-ts";
 
 //* Audio imports
-import { writeWithBackpressure } from "./audio/audio-writer.ts";
+import { openAudioPlayer, type AudioPlayer } from "./audio/audio-player.ts";
+import { writeWithBackpressure, type AudioSink } from "./audio/audio-writer.ts";
 
 //* Input imports
 import { JoypadInput } from "./input/input.ts";
@@ -57,8 +56,8 @@ let stopping = false;
 let lastRenderNs = 0;
 let audioEnabled = true;
 let joypad: JoypadInput | undefined;
-let player: ChildProcess | undefined;
-let audioSink: Writable | undefined;
+let player: AudioPlayer | undefined;
+let audioSink: AudioSink | undefined;
 let batterySave: BatterySave | null | undefined;
 let playerClosed = Promise.resolve();
 
@@ -88,8 +87,7 @@ function cleanup(): void {
   }
   cleaned = true;
   joypad?.stop();
-  audioSink?.end();
-  player?.kill();
+  player?.close();
   restoreTerminal();
 }
 
@@ -147,46 +145,13 @@ const highPassDt = 1 / sampleRate;
 const highPassRc = 1 / (2 * Math.PI * HIGHPASS_CUTOFF_HZ);
 const highPassAlpha = highPassRc / (highPassRc + highPassDt);
 
-const playerProcess = spawn(
-  "pw-cat",
-  [
-    "--playback",
-    "--rate",
-    String(sampleRate),
-    "--channels",
-    "2",
-    "--format",
-    "s16",
-    "--quality",
-    "15",
-    "--latency",
-    "20ms",
-    "--media-role",
-    "Game",
-    "-",
-  ],
-  { stdio: ["pipe", "ignore", "pipe"] },
-);
-player = playerProcess;
-
-playerClosed = new Promise<void>((resolve) => {
-  playerProcess.once("exit", () => {
-    audioEnabled = false;
-    resolve();
-  });
-});
-
-playerProcess.on("error", (err) => {
+const audioPlayer = openAudioPlayer(sampleRate);
+player = audioPlayer;
+audioSink = audioPlayer.sink;
+playerClosed = audioPlayer.closed;
+void audioPlayer.closed.then(() => {
   audioEnabled = false;
-  console.error("failed to start pw-cat:", err);
 });
-
-if (!playerProcess.stdin) {
-  throw new Error("pw-cat stdin is not available");
-}
-
-playerProcess.stderr?.resume();
-audioSink = playerProcess.stdin;
 
 const framePacer = new FramePacer();
 const leftChannel = createHighPassChannel();
@@ -227,7 +192,11 @@ async function writeAudio(): Promise<void> {
   }
 
   try {
-    await Promise.race([writeWithBackpressure(audioSink, pcm, sampleRate), playerClosed]);
+    if (audioPlayer.applyBackpressure) {
+      await Promise.race([writeWithBackpressure(audioSink, pcm, sampleRate), playerClosed]);
+    } else {
+      audioSink.write(pcm);
+    }
   } catch (error) {
     audioEnabled = false;
     console.error("audio playback stopped:", error);

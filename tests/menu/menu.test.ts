@@ -50,14 +50,14 @@ describe("reduceMenu", () => {
         throw new Error("expected the cursor to move to Rom");
       }
 
-      expect(reduceMenu(step.state, "confirm", ["b.gb", "notes.txt", "a.gb"])).toEqual({
+      expect(reduceMenu(step.state, "confirm", ["b.gbc", "notes.txt", "a.gb"])).toEqual({
         type: "continue",
         state: {
           screen: "rom",
           cursor: 0,
           format: "braille",
           controls: DEFAULT_CONTROLS,
-          roms: ["a.gb", "b.gb"],
+          roms: ["a.gb", "b.gbc"],
         },
       });
     });
@@ -68,14 +68,14 @@ describe("reduceMenu", () => {
         cursor: 1,
         format: "braille-green",
         controls: DEFAULT_CONTROLS,
-        roms: ["alpha.gb", "beta.gb"],
+        roms: ["alpha.gb", "beta.gbc"],
       };
 
       expect(reduceMenu(state, "confirm")).toEqual({
         type: "start",
         format: "braille-green",
         controls: DEFAULT_CONTROLS,
-        romPath: "roms/beta.gb",
+        romPath: "roms/beta.gbc",
       });
     });
 
@@ -357,10 +357,11 @@ describe("controls screen", () => {
 });
 
 describe("listRomFiles", () => {
-  it("keeps gb names, drops other names, and sorts", () => {
+  it("keeps gb and gbc names, drops other names, and sorts", () => {
     expect(listRomFiles(["zeta.gbc", "notes.txt", "alpha.gb", "nested/skip.gb", "Demo.GB"])).toEqual([
       "alpha.gb",
       "Demo.GB",
+      "zeta.gbc",
     ]);
   });
 });

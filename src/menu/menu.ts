@@ -606,7 +606,7 @@ function isRomFileName(name: string): boolean {
     return false;
   }
   const lower = name.toLowerCase();
-  return lower.endsWith(".gb");
+  return lower.endsWith(".gb") || lower.endsWith(".gbc");
 }
 
 function readFlagValue(argv: string[], index: number, flag: string): string {
