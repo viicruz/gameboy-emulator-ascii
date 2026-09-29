@@ -45,6 +45,18 @@ describe("parseSettings", () => {
     ).toEqual([{ kind: "char", value: "w" }]);
   });
 
+  it("keeps an absolute roms directory", () => {
+    expect(parseSettings({ romsDirectory: "/games/gb" }).romsDirectory).toBe("/games/gb");
+  });
+
+  it("drops a missing roms directory", () => {
+    expect(parseSettings({}).romsDirectory).toBeUndefined();
+  });
+
+  it("drops a relative roms directory", () => {
+    expect(parseSettings({ romsDirectory: "roms" }).romsDirectory).toBeUndefined();
+  });
+
   it("falls back to braille when the format name is unknown", () => {
     expect(parseSettings({ format: "quads" })).toEqual({
       format: "braille",
@@ -99,6 +111,26 @@ describe("writeSettings", () => {
     expect(await readSettings(filePath)).toEqual({
       format: "braille-green",
       controls: { ...DEFAULT_CONTROLS, a: [{ kind: "char", value: "w" }] },
+    });
+  });
+
+  it("round-trips an absolute roms directory", async () => {
+    const dir = await makeTempDir();
+    const filePath = join(dir, "settings.json");
+
+    await writeSettings(
+      {
+        format: "braille",
+        controls: DEFAULT_CONTROLS,
+        romsDirectory: "/games/gb",
+      },
+      filePath,
+    );
+
+    expect(await readSettings(filePath)).toEqual({
+      format: "braille",
+      controls: DEFAULT_CONTROLS,
+      romsDirectory: "/games/gb",
     });
   });
 });

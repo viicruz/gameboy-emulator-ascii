@@ -1,14 +1,16 @@
 //* Libraries imports
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { homedir } from "node:os";
+import { dirname, isAbsolute } from "node:path";
 
 //* Controls imports
 import { cloneControls, DEFAULT_CONTROLS, parseControls, type Controls } from "../input/controls.ts";
 
+//* Paths imports
+import { appPaths } from "../paths/paths.ts";
+
 //* Render imports
 import { LOCAL_RENDER_FORMATS, type AppRenderFormat } from "../render/render.ts";
-
-const SETTINGS_PATH = "saves/settings.json";
 
 const DEFAULT_SETTINGS: Settings = {
   format: "braille",
@@ -18,6 +20,7 @@ const DEFAULT_SETTINGS: Settings = {
 export type Settings = {
   format: AppRenderFormat;
   controls: Controls;
+  romsDirectory?: string;
 };
 
 export function parseSettings(raw: unknown): Settings {
@@ -25,12 +28,17 @@ export function parseSettings(raw: unknown): Settings {
     return { format: DEFAULT_SETTINGS.format, controls: cloneControls(DEFAULT_CONTROLS) };
   }
 
-  const record = raw as { format?: unknown; controls?: unknown };
+  const record = raw as { format?: unknown; controls?: unknown; romsDirectory?: unknown };
   const format = isAppRenderFormat(record.format) ? record.format : DEFAULT_SETTINGS.format;
-  return { format, controls: parseControls(record.controls) };
+  const controls = parseControls(record.controls);
+  const romsDirectory = parseRomsDirectory(record.romsDirectory);
+  if (romsDirectory === undefined) {
+    return { format, controls };
+  }
+  return { format, controls, romsDirectory };
 }
 
-export async function readSettings(filePath = SETTINGS_PATH): Promise<Settings> {
+export async function readSettings(filePath = defaultSettingsPath()): Promise<Settings> {
   try {
     const file = Bun.file(filePath);
     if (!(await file.exists())) {
@@ -42,7 +50,7 @@ export async function readSettings(filePath = SETTINGS_PATH): Promise<Settings> 
   }
 }
 
-export async function writeSettings(settings: Settings, filePath = SETTINGS_PATH): Promise<void> {
+export async function writeSettings(settings: Settings, filePath = defaultSettingsPath()): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
   const tmpPath = `${filePath}.tmp`;
   try {
@@ -52,6 +60,21 @@ export async function writeSettings(settings: Settings, filePath = SETTINGS_PATH
     await rm(tmpPath, { force: true });
     throw error;
   }
+}
+
+function defaultSettingsPath(): string {
+  return appPaths({
+    platform: process.platform,
+    home: homedir(),
+    env: process.env,
+  }).settingsPath;
+}
+
+function parseRomsDirectory(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length === 0 || !isAbsolute(value)) {
+    return undefined;
+  }
+  return value;
 }
 
 function isAppRenderFormat(value: unknown): value is AppRenderFormat {
