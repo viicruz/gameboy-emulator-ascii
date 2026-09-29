@@ -1,5 +1,7 @@
 //* Libraries imports
+import { spawn } from "node:child_process";
 import { readdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 //* Controls imports
 import {
@@ -13,15 +15,17 @@ import {
   type KeyBinding,
 } from "../input/controls.ts";
 
+//* Paths imports
+import { shortenHome } from "../paths/paths.ts";
+
 //* Render imports
 import { LOCAL_RENDER_FORMATS, type AppRenderFormat } from "../render/render.ts";
 
-const ROMS_DIRECTORY = "roms";
 const ESCAPE_TIMEOUT_MS = 25;
 
 const MENU_RENDER_FORMATS = LOCAL_RENDER_FORMATS;
 
-const HOME_ROWS = ["render", "controls", "rom"] as const;
+const HOME_ROWS = ["render", "controls", "library", "rom"] as const;
 
 const BUTTON_LABEL: Record<GameButton, string> = {
   a: "A",
@@ -41,6 +45,12 @@ const ARROW_FROM_FINAL: Record<string, KeyBinding> = {
   D: { kind: "arrow", direction: "left" },
 };
 
+const FALLBACK_SESSION: MenuSession = {
+  defaultRomsDirectory: "/roms",
+  launchDirectory: "/",
+  canOpenFolder: false,
+};
+
 export type MenuAction = "up" | "down" | "confirm" | "back";
 
 export type MenuBindingKey = { type: "binding"; binding: KeyBinding } | { type: "reserved" };
@@ -49,34 +59,79 @@ export type MenuKey = MenuAction | "quit" | MenuBindingKey;
 
 type MenuMode = "navigate" | "capture";
 
+type MenuCore = {
+  format: AppRenderFormat;
+  controls: Controls;
+  romsDirectory: string;
+  homeDirectory: string;
+};
+
+type LibraryContext = {
+  defaultRomsDirectory: string;
+  launchDirectory: string;
+  canOpenFolder: boolean;
+};
+
 export type MenuState =
-  | { screen: "home"; cursor: number; format: AppRenderFormat; controls: Controls }
-  | { screen: "render"; cursor: number; format: AppRenderFormat; controls: Controls }
-  | { screen: "rom"; cursor: number; format: AppRenderFormat; controls: Controls; roms: string[] }
-  | { screen: "controls"; cursor: number; format: AppRenderFormat; controls: Controls }
-  | {
+  | (MenuCore & { screen: "home"; cursor: number })
+  | (MenuCore & { screen: "render"; cursor: number })
+  | (MenuCore & { screen: "rom"; cursor: number; roms: string[] })
+  | (MenuCore & { screen: "controls"; cursor: number })
+  | (MenuCore & {
       screen: "capture";
       cursor: number;
-      format: AppRenderFormat;
-      controls: Controls;
       button: GameButton;
       notice?: string;
-    };
+    })
+  | (MenuCore & LibraryContext & { screen: "library"; cursor: number })
+  | (MenuCore & LibraryContext & { screen: "places"; cursor: number })
+  | (MenuCore &
+      LibraryContext & { screen: "browse"; cursor: number; directory: string; entries: string[] });
 
 export type MenuStep =
   | { type: "continue"; state: MenuState }
   | { type: "quit" }
-  | { type: "start"; format: AppRenderFormat; controls: Controls; romPath: string };
+  | { type: "start"; format: AppRenderFormat; controls: Controls; romPath: string }
+  | { type: "persist-library"; romsDirectory: string; state: MenuState }
+  | { type: "open-folder"; directory: string; state: MenuState };
 
 export type MenuResult =
   | { type: "quit" }
   | { type: "start"; format: AppRenderFormat; controls: Controls; romPath: string };
 
+export type MenuInput = {
+  romFiles?: readonly string[];
+  directories?: readonly string[];
+};
+
+export type MenuSession = {
+  defaultRomsDirectory: string;
+  launchDirectory: string;
+  canOpenFolder: boolean;
+};
+
+export type LibrarySnapshot = {
+  format: AppRenderFormat;
+  controls: Controls;
+};
+
+export type RunMenuOptions = {
+  romsDirectory: string;
+  homeDirectory: string;
+  defaultRomsDirectory: string;
+  launchDirectory: string;
+  canOpenFolder: boolean;
+  onLibraryChange?: (romsDirectory: string, snapshot: LibrarySnapshot) => Promise<void>;
+  openFolder?: (directory: string) => void;
+};
+
 export function createHomeState(
   format: AppRenderFormat,
   controls: Controls = DEFAULT_CONTROLS,
+  romsDirectory = "/roms",
+  homeDirectory = "/home/user",
 ): MenuState {
-  return { screen: "home", cursor: 0, format, controls };
+  return { screen: "home", cursor: 0, format, controls, romsDirectory, homeDirectory };
 }
 
 export function listRomFiles(names: readonly string[]): string[] {
@@ -85,10 +140,45 @@ export function listRomFiles(names: readonly string[]): string[] {
     .sort((left, right) => left.localeCompare(right, "en"));
 }
 
+export function directoryToRead(state: MenuState): string | undefined {
+  if (state.screen === "places") {
+    if (state.cursor === 0) {
+      return state.homeDirectory;
+    }
+    if (state.cursor === 2) {
+      return state.launchDirectory;
+    }
+    return undefined;
+  }
+
+  if (state.screen !== "browse") {
+    return undefined;
+  }
+
+  if (state.cursor === 0) {
+    return undefined;
+  }
+
+  if (state.cursor === 1) {
+    const parent = dirname(state.directory);
+    if (parent === state.directory) {
+      return undefined;
+    }
+    return parent;
+  }
+
+  const name = state.entries[state.cursor - 2];
+  if (name === undefined) {
+    return undefined;
+  }
+  return join(state.directory, name);
+}
+
 export function reduceMenu(
   state: MenuState,
   action: MenuAction | MenuBindingKey,
-  romFiles: readonly string[] = [],
+  input: MenuInput = {},
+  session: MenuSession = FALLBACK_SESSION,
 ): MenuStep {
   if (typeof action !== "string") {
     return reduceCapture(state, action);
@@ -106,7 +196,7 @@ export function reduceMenu(
   }
 
   if (state.screen === "home") {
-    return openHomeRow(state, romFiles);
+    return openHomeRow(state, input, session);
   }
 
   if (state.screen === "render") {
@@ -116,7 +206,7 @@ export function reduceMenu(
     }
     return {
       type: "continue",
-      state: { screen: "home", cursor: 0, format, controls: state.controls },
+      state: { screen: "home", cursor: 0, ...core(state), format },
     };
   }
 
@@ -128,6 +218,18 @@ export function reduceMenu(
     return { type: "continue", state };
   }
 
+  if (state.screen === "library") {
+    return confirmLibrary(state);
+  }
+
+  if (state.screen === "places") {
+    return confirmPlaces(state, input);
+  }
+
+  if (state.screen === "browse") {
+    return confirmBrowse(state, input);
+  }
+
   const name = state.roms[state.cursor];
   if (name === undefined || !isRomFileName(name)) {
     return { type: "continue", state };
@@ -137,7 +239,7 @@ export function reduceMenu(
     type: "start",
     format: state.format,
     controls: state.controls,
-    romPath: `${ROMS_DIRECTORY}/${name}`,
+    romPath: join(state.romsDirectory, name),
   };
 }
 
@@ -146,7 +248,8 @@ export function renderMenu(state: MenuState): string {
     return [
       row(state.cursor === 0, `RENDER  ${state.format}`),
       row(state.cursor === 1, "CONTROLS"),
-      row(state.cursor === 2, "ROM"),
+      row(state.cursor === 2, `LIBRARY  ${shortenHome(state.romsDirectory, state.homeDirectory)}`),
+      row(state.cursor === 3, "ROM"),
       "",
       "enter  open    esc  quit",
     ].join("\n");
@@ -185,8 +288,49 @@ export function renderMenu(state: MenuState): string {
     ].join("\n");
   }
 
+  if (state.screen === "library") {
+    const rows = [row(state.cursor === 0, "change")];
+    if (state.canOpenFolder) {
+      rows.push(row(state.cursor === 1, "open folder"));
+    }
+    return [
+      "LIBRARY",
+      "",
+      shortenHome(state.romsDirectory, state.homeDirectory),
+      "",
+      ...rows,
+      "",
+      "enter  choose   esc  back",
+    ].join("\n");
+  }
+
+  if (state.screen === "places") {
+    return [
+      "PLACES",
+      "",
+      row(state.cursor === 0, "Home"),
+      row(state.cursor === 1, "Default library"),
+      row(state.cursor === 2, shortenHome(state.launchDirectory, state.homeDirectory)),
+      "",
+      "enter  open    esc  back",
+    ].join("\n");
+  }
+
+  if (state.screen === "browse") {
+    return [
+      "BROWSE",
+      shortenHome(state.directory, state.homeDirectory),
+      "",
+      row(state.cursor === 0, "use this folder"),
+      row(state.cursor === 1, ".."),
+      ...state.entries.map((name, index) => row(state.cursor === index + 2, name)),
+      "",
+      "enter  open    esc  back",
+    ].join("\n");
+  }
+
   if (state.roms.length === 0) {
-    return ["ROM", "", "no roms in roms/", "", "esc  back"].join("\n");
+    return ["ROM", "", "no roms in this library", "", "esc  back"].join("\n");
   }
 
   return [
@@ -215,13 +359,36 @@ export function parseRomArg(argv: string[]): string | undefined {
   return undefined;
 }
 
-export async function readRomDirectory(directory = ROMS_DIRECTORY): Promise<string[]> {
+export async function readRomDirectory(directory: string): Promise<string[]> {
   try {
     const entries = await readdir(directory, { withFileTypes: true });
     const names = entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
     return listRomFiles(names);
   } catch {
     return [];
+  }
+}
+
+export async function readSubdirectories(directory: string): Promise<string[]> {
+  try {
+    const entries = await readdir(directory, { withFileTypes: true });
+    const names = entries
+      .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
+      .map((entry) => entry.name);
+    return listDirectoryNames(names);
+  } catch {
+    return [];
+  }
+}
+
+export function openInFileManager(directory: string, platform = process.platform): void {
+  const command = platform === "win32" ? "explorer" : "xdg-open";
+  try {
+    const child = spawn(command, [directory], { detached: true, stdio: "ignore" });
+    child.on("error", () => {});
+    child.unref();
+  } catch {
+    return;
   }
 }
 
@@ -347,11 +514,23 @@ export class MenuKeyParser {
 export async function runMenu(
   initialFormat: AppRenderFormat,
   initialControls: Controls = DEFAULT_CONTROLS,
+  options: RunMenuOptions,
 ): Promise<MenuResult> {
-  let state = createHomeState(initialFormat, initialControls);
+  let state = createHomeState(
+    initialFormat,
+    initialControls,
+    options.romsDirectory,
+    options.homeDirectory,
+  );
   let settled = false;
   let pumping = false;
   const queue: MenuKey[] = [];
+  const session: MenuSession = {
+    defaultRomsDirectory: options.defaultRomsDirectory,
+    launchDirectory: options.launchDirectory,
+    canOpenFolder: options.canOpenFolder,
+  };
+  const openFolder = options.openFolder ?? openInFileManager;
 
   const draw = (): void => {
     const frame = renderMenu(state)
@@ -385,18 +564,30 @@ export async function runMenu(
           break;
         }
 
+        const listingDirectory = key === "confirm" ? directoryToRead(state) : undefined;
+        const directories =
+          listingDirectory !== undefined ? await readSubdirectories(listingDirectory) : undefined;
         const romFiles =
-          key === "confirm" && state.screen === "home" && state.cursor === 2
-            ? await readRomDirectory()
+          key === "confirm" && state.screen === "home" && HOME_ROWS[state.cursor] === "rom"
+            ? await readRomDirectory(state.romsDirectory)
             : undefined;
         if (settled) {
           break;
         }
 
-        const step = reduceMenu(state, key, romFiles);
+        const step = reduceMenu(state, key, { romFiles, directories }, session);
         if (step.type === "quit" || step.type === "start") {
           finish(step);
           break;
+        }
+
+        if (step.type === "persist-library") {
+          await options.onLibraryChange?.(step.romsDirectory, {
+            format: step.state.format,
+            controls: step.state.controls,
+          });
+        } else if (step.type === "open-folder") {
+          openFolder(step.directory);
         }
 
         state = step.state;
@@ -447,6 +638,15 @@ function cursorLength(state: MenuState): number {
   if (state.screen === "capture") {
     return 1;
   }
+  if (state.screen === "library") {
+    return state.canOpenFolder ? 2 : 1;
+  }
+  if (state.screen === "places") {
+    return 3;
+  }
+  if (state.screen === "browse") {
+    return state.entries.length + 2;
+  }
   return state.roms.length;
 }
 
@@ -460,48 +660,66 @@ function backFrom(state: MenuState): MenuStep {
       state: {
         screen: "controls",
         cursor: state.cursor,
-        format: state.format,
-        controls: state.controls,
+        ...core(state),
       },
     };
   }
+  if (state.screen === "browse") {
+    return { type: "continue", state: toPlaces(state) };
+  }
+  if (state.screen === "places") {
+    return { type: "continue", state: toLibrary(state, state.romsDirectory) };
+  }
+  if (state.screen === "library") {
+    return {
+      type: "continue",
+      state: { screen: "home", cursor: homeIndex("library"), ...core(state) },
+    };
+  }
 
-  const cursor = state.screen === "rom" ? 2 : state.screen === "controls" ? 1 : 0;
+  const cursor =
+    state.screen === "rom" ? homeIndex("rom") : state.screen === "controls" ? homeIndex("controls") : 0;
   return {
     type: "continue",
     state: {
       screen: "home",
       cursor,
-      format: state.format,
-      controls: state.controls,
+      ...core(state),
     },
   };
 }
 
-function openHomeRow(state: MenuState & { screen: "home" }, romFiles: readonly string[]): MenuStep {
-  if (state.cursor === 0) {
+function openHomeRow(
+  state: MenuState & { screen: "home" },
+  input: MenuInput,
+  session: MenuSession,
+): MenuStep {
+  const rowName = HOME_ROWS[state.cursor];
+  if (rowName === "render") {
     const cursor = MENU_RENDER_FORMATS.indexOf(state.format);
     return {
       type: "continue",
       state: {
         screen: "render",
         cursor: cursor === -1 ? 0 : cursor,
-        format: state.format,
-        controls: state.controls,
+        ...core(state),
       },
     };
   }
 
-  if (state.cursor === 1) {
+  if (rowName === "controls") {
     return {
       type: "continue",
       state: {
         screen: "controls",
         cursor: 0,
-        format: state.format,
-        controls: state.controls,
+        ...core(state),
       },
     };
+  }
+
+  if (rowName === "library") {
+    return { type: "continue", state: libraryScreen(state, session) };
   }
 
   return {
@@ -509,9 +727,8 @@ function openHomeRow(state: MenuState & { screen: "home" }, romFiles: readonly s
     state: {
       screen: "rom",
       cursor: 0,
-      format: state.format,
-      controls: state.controls,
-      roms: listRomFiles(romFiles),
+      ...core(state),
+      roms: listRomFiles(input.romFiles ?? []),
     },
   };
 }
@@ -534,11 +751,49 @@ function confirmControls(state: MenuState & { screen: "controls" }): MenuStep {
     state: {
       screen: "capture",
       cursor: state.cursor,
-      format: state.format,
-      controls: state.controls,
+      ...core(state),
       button,
     },
   };
+}
+
+function confirmLibrary(state: MenuState & { screen: "library" }): MenuStep {
+  if (state.cursor === 0) {
+    return { type: "continue", state: toPlaces(state) };
+  }
+  if (state.cursor === 1 && state.canOpenFolder) {
+    return { type: "open-folder", directory: state.romsDirectory, state };
+  }
+  return { type: "continue", state };
+}
+
+function confirmPlaces(state: MenuState & { screen: "places" }, input: MenuInput): MenuStep {
+  if (state.cursor === 1) {
+    return {
+      type: "persist-library",
+      romsDirectory: state.defaultRomsDirectory,
+      state: toLibrary(state, state.defaultRomsDirectory),
+    };
+  }
+
+  const directory = state.cursor === 0 ? state.homeDirectory : state.launchDirectory;
+  return { type: "continue", state: toBrowse(state, directory, input.directories ?? []) };
+}
+
+function confirmBrowse(state: MenuState & { screen: "browse" }, input: MenuInput): MenuStep {
+  if (state.cursor === 0) {
+    return {
+      type: "persist-library",
+      romsDirectory: state.directory,
+      state: toLibrary(state, state.directory),
+    };
+  }
+
+  const directory = directoryToRead(state);
+  if (directory === undefined) {
+    return { type: "continue", state };
+  }
+  return { type: "continue", state: toBrowse(state, directory, input.directories ?? []) };
 }
 
 function reduceCapture(state: MenuState, action: MenuBindingKey): MenuStep {
@@ -554,10 +809,85 @@ function reduceCapture(state: MenuState, action: MenuBindingKey): MenuStep {
     state: {
       screen: "controls",
       cursor: state.cursor,
-      format: state.format,
+      ...core(state),
       controls: assignBinding(state.controls, state.button, action.binding),
     },
   };
+}
+
+function libraryScreen(state: MenuCore, session: MenuSession): MenuState {
+  return {
+    screen: "library",
+    cursor: 0,
+    format: state.format,
+    controls: state.controls,
+    romsDirectory: state.romsDirectory,
+    homeDirectory: state.homeDirectory,
+    defaultRomsDirectory: session.defaultRomsDirectory,
+    launchDirectory: session.launchDirectory,
+    canOpenFolder: session.canOpenFolder,
+  };
+}
+
+function toLibrary(state: MenuCore & LibraryContext, romsDirectory: string): MenuState {
+  return {
+    screen: "library",
+    cursor: 0,
+    format: state.format,
+    controls: state.controls,
+    romsDirectory,
+    homeDirectory: state.homeDirectory,
+    defaultRomsDirectory: state.defaultRomsDirectory,
+    launchDirectory: state.launchDirectory,
+    canOpenFolder: state.canOpenFolder,
+  };
+}
+
+function toPlaces(state: MenuCore & LibraryContext): MenuState {
+  return {
+    screen: "places",
+    cursor: 0,
+    format: state.format,
+    controls: state.controls,
+    romsDirectory: state.romsDirectory,
+    homeDirectory: state.homeDirectory,
+    defaultRomsDirectory: state.defaultRomsDirectory,
+    launchDirectory: state.launchDirectory,
+    canOpenFolder: state.canOpenFolder,
+  };
+}
+
+function toBrowse(
+  state: MenuCore & LibraryContext,
+  directory: string,
+  entries: readonly string[],
+): MenuState {
+  return {
+    screen: "browse",
+    cursor: 0,
+    format: state.format,
+    controls: state.controls,
+    romsDirectory: state.romsDirectory,
+    homeDirectory: state.homeDirectory,
+    defaultRomsDirectory: state.defaultRomsDirectory,
+    launchDirectory: state.launchDirectory,
+    canOpenFolder: state.canOpenFolder,
+    directory,
+    entries: listDirectoryNames(entries),
+  };
+}
+
+function core(state: MenuState): MenuCore {
+  return {
+    format: state.format,
+    controls: state.controls,
+    romsDirectory: state.romsDirectory,
+    homeDirectory: state.homeDirectory,
+  };
+}
+
+function homeIndex(rowName: (typeof HOME_ROWS)[number]): number {
+  return HOME_ROWS.indexOf(rowName);
 }
 
 function capturePlainKey(head: string): MenuKey | null {
@@ -607,6 +937,17 @@ function isRomFileName(name: string): boolean {
   }
   const lower = name.toLowerCase();
   return lower.endsWith(".gb") || lower.endsWith(".gbc");
+}
+
+function listDirectoryNames(names: readonly string[]): string[] {
+  return names.filter((name) => isDirectoryName(name)).sort((left, right) => left.localeCompare(right, "en"));
+}
+
+function isDirectoryName(name: string): boolean {
+  if (name.length === 0 || name === "." || name === "..") {
+    return false;
+  }
+  return !name.includes("/") && !name.includes("\\");
 }
 
 function readFlagValue(argv: string[], index: number, flag: string): string {

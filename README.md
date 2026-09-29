@@ -1,14 +1,8 @@
 # gameboy-emulator-terminal
 
-Terminal Game Boy emulator. Video is drawn as braille; audio plays through the system mixer.
+This is a study project and a proof of concept. It is not an official product and it is not affiliated with Nintendo. It does not ship ROMs. You are responsible for using only games you have the right to use.
 
-## Emulator core
-
-The core is [`gboy-ts`](https://github.com/viicruz/gboy.ts), a fork of [gboy.ts](https://github.com/MaxLeiter/gboy.ts). Upstream targets the browser and serverless environments, where progress is a full savestate (`serialize` / `deserialize`): a snapshot of the running machine. It does not write cartridge battery RAM to disk.
-
-The fork adds `getRam`, `setRam`, and `setOnRamWrite` so a long-running process can persist that RAM. This app turns those calls into `saves/<rom-name>.sav`.
-
-Upstream steps the APU frame sequencer every 512 T-cycles, so length, envelope, and sweep run sixteen times too fast. The fork sets that period to 8192 T-cycles. This install pins an earlier fork commit and applies the same change from `patches/`.
+Terminal Game Boy emulator. Video is drawn as braille; audio plays through the system mixer. The core is [`gboy-ts`](https://github.com/viicruz/gboy.ts), a fork of [gboy.ts](https://github.com/MaxLeiter/gboy.ts). Fork details are in [docs/internals.md](docs/internals.md).
 
 ## Requirements
 
@@ -22,6 +16,8 @@ Running from source also needs [Bun](https://bun.com).
 If the audio device cannot be opened, playback stops and the emulator keeps running.
 
 ## Install
+
+The installer does not ship ROMs.
 
 ### Linux
 
@@ -51,23 +47,15 @@ To install a specific version:
 $env:GBT_VERSION='X.Y.Z'; irm https://github.com/viicruz/gameboy-emulator-terminal/releases/download/vX.Y.Z/install.ps1 | iex
 ```
 
-The installer does not ship ROMs. `--rom`, the `roms/` directory, and `saves/` stay relative to the directory where you run `gbt`.
-
 ### From source
 
 ```bash
 bun install
 ```
 
-## ROMs
-
-Put `.gb` and `.gbc` files in `roms/`. The menu lists both. ROM files are gitignored; `roms/.gitkeep` stays in the repo.
-
-This emulator targets the original Game Boy. Some Game Boy Color games also run on that hardware and work here. Games that require Game Boy Color hardware may fail to start or run incorrectly.
-
 ## Run
 
-Open the menu (render format, controls, and ROM):
+Open the menu:
 
 ```bash
 gbt
@@ -83,67 +71,22 @@ Skip the menu and load a ROM directly:
 
 ```bash
 gbt --rom roms/game.gb
-gbt --rom=roms/game.gb
 ```
 
 From source, pass flags after `--`:
 
 ```bash
 bun start -- --rom roms/game.gb
-bun start -- --rom=roms/game.gb
 ```
 
-Optional flags:
+Flags, formats, the ROM library, controls, and saves are described in [docs/usage.md](docs/usage.md).
 
-| Flag | Description |
-| --- | --- |
-| `--format` | Render format. Default is `braille`. |
-| `--width` | Frame width in columns. Also caps braille width. |
-| `--rom` | Path to a `.gb` or `.gbc` file. |
-| `--version` | Print the installed version and exit. |
+## Terminal support
 
-Formats: `braille`, `braille-green`.
-
-```bash
-gbt --rom roms/game.gb --format braille-green --width 80
-```
-
-From source:
-
-```bash
-bun start -- --rom roms/game.gb --format braille-green --width 80
-```
-
-## Controls
-
-| Button | Keys |
-| --- | --- |
-| D-pad | Arrow keys |
-| A | `Z`, `A` |
-| B | `X`, `S` |
-| Select | Space |
-| Start | Enter |
-| Quit | `Q`, Ctrl+C |
-
-Rebind keys from the menu. The chosen format and bindings are stored in `saves/settings.json`.
-
-In-game input uses the [Kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/). On start the emulator asks the terminal to disambiguate escape codes, report press, repeat, and release, and send every key as a CSI `u` sequence. It turns the protocol off on exit.
-
-Those events are used only when the terminal reports both event types and all-keys encoding. A press or repeat holds the button, and a release clears it immediately.
-
-Terminals that do not report press and release fall back to ordinary key repeat. A tap stays held for 350 ms, and each repeat extends the hold by 80 ms. Movement and button response feel slower and stickier in that mode. This applies to in-game controls, not the menu.
+Terminals that report key press and release hold a button until you let go. Terminals that do not fall back to ordinary key repeat. Movement and button response feel slower and stickier in that mode. This applies to in-game controls, not the menu.
 
 In the menu, arrow keys move the cursor, Enter confirms, and Esc goes back or quits from the home screen.
 
-## Saves
+## Events
 
-Cartridges whose type byte at `0x0147` includes a battery write to `saves/<rom-name>.sav`. Other cartridges do not create a file. On startup the save is loaded when its size matches cartridge RAM.
-
-A RAM write waits 1 second, then the file is replaced atomically: write `*.sav.tmp`, then rename it over the save. Quitting flushes a pending write. Render format and key bindings stay in `saves/settings.json`, separate from cartridge RAM.
-
-## Tests
-
-```bash
-bun test
-bun test tests/menu/menu.test.ts
-```
+A press or a repeat holds the button. A release clears it. When the terminal cannot report those events, the hold is timed instead. Protocol flags, encodings, and timings are in [docs/internals.md](docs/internals.md).

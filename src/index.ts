@@ -1,4 +1,6 @@
 //* Libraries imports
+import { mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
 import { Emulator } from "gboy-ts";
 
 //* Package imports
@@ -13,6 +15,9 @@ import { JoypadInput } from "./input/input.ts";
 
 //* Menu imports
 import { parseRomArg, runMenu } from "./menu/menu.ts";
+
+//* Paths imports
+import { appPaths, canOpenFolder, resolveRomsDirectory, storedRomsDirectory } from "./paths/paths.ts";
 
 //* Render imports
 import {
@@ -41,7 +46,25 @@ if (argv.includes("--version")) {
   process.exit(0);
 }
 
-const settings = await readSettings();
+const paths = appPaths({
+  platform: process.platform,
+  home: homedir(),
+  env: process.env,
+});
+
+try {
+  await mkdir(paths.defaultRomsDirectory, { recursive: true });
+} catch (error) {
+  console.error("failed to create the default rom library:", error);
+}
+
+const settings = await readSettings(paths.settingsPath);
+let persistedRomsDirectory = settings.romsDirectory;
+const romsDirectory = resolveRomsDirectory(
+  persistedRomsDirectory,
+  paths.defaultRomsDirectory,
+  process.platform,
+);
 
 let format: AppRenderFormat;
 let width: number;
@@ -123,7 +146,28 @@ let romPath: string;
 
 if (requestedRomPath === undefined) {
   beginTerminalSession();
-  const menuResult = await runMenu(format, controls);
+  const menuResult = await runMenu(format, controls, {
+    romsDirectory,
+    homeDirectory: homedir(),
+    defaultRomsDirectory: paths.defaultRomsDirectory,
+    launchDirectory: process.cwd(),
+    canOpenFolder: canOpenFolder(process.platform, process.env),
+    onLibraryChange: async (directory, snapshot) => {
+      persistedRomsDirectory = storedRomsDirectory(directory, paths.defaultRomsDirectory);
+      try {
+        await writeSettings(
+          {
+            format: snapshot.format,
+            controls: snapshot.controls,
+            romsDirectory: persistedRomsDirectory,
+          },
+          paths.settingsPath,
+        );
+      } catch (error) {
+        console.error("failed to write settings:", error);
+      }
+    },
+  });
   if (menuResult.type === "quit") {
     cleanup();
     process.exit(0);
@@ -137,7 +181,7 @@ if (requestedRomPath === undefined) {
 }
 
 try {
-  await writeSettings({ format, controls });
+  await writeSettings({ format, controls, romsDirectory: persistedRomsDirectory }, paths.settingsPath);
 } catch (error) {
   console.error("failed to write settings:", error);
 }
@@ -147,7 +191,7 @@ const rom = new Uint8Array(await Bun.file(romPath).arrayBuffer());
 const emulator = new Emulator(rom);
 emulator.setAudioOutputEnabled(true);
 
-batterySave = await openBatterySave(rom, romPath, emulator);
+batterySave = await openBatterySave(rom, romPath, emulator, { savesDir: paths.savesDirectory });
 
 const sampleRate = emulator.getAudioSampleRate(); // 48000
 const highPassDt = 1 / sampleRate;
