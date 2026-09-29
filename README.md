@@ -4,6 +4,9 @@ This is a study project and a proof of concept. It is not an official product an
 
 Terminal Game Boy emulator. Video is drawn as braille; audio plays through the system mixer. The core is [`gboy-ts`](https://github.com/viicruz/gboy.ts), a fork of [gboy.ts](https://github.com/MaxLeiter/gboy.ts). Fork details are in [docs/internals.md](docs/internals.md).
 
+<img width="1004" height="947" alt="image" src="https://github.com/user-attachments/assets/32ef3ff2-5311-4bfc-98dc-cea4224648f1" />
+
+
 ## Requirements
 
 The installed command does not need Bun.
